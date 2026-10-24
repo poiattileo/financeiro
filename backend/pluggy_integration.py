@@ -22,6 +22,27 @@ def norm(value):
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
+def name_matches(expected, actual):
+    if not expected or not actual:
+        return False
+    if norm(expected) == norm(actual):
+        return True
+    def words(value):
+        plain = unicodedata.normalize("NFKD", value)
+        plain = "".join(c for c in plain if not unicodedata.combining(c))
+        return re.findall(r"[a-z0-9]+", plain.lower())
+    expected_words = words(expected)
+    actual_words = words(actual)
+    return len(norm(expected)) >= 5 and actual_words[:len(expected_words)] == expected_words
+
+
+def pix_recipient(description, payment_method):
+    if str(payment_method or "").upper() != "PIX":
+        return None
+    match = re.match(r"^\s*pix\s+enviado(?:\s+para)?\s+(.+?)\s*$", description or "", re.I)
+    return match.group(1).strip()[:200] if match else None
+
+
 def only_digits(value):
     return re.sub(r"\D", "", value or "")
 
@@ -52,7 +73,8 @@ def auto_match(cur, user_id, transaction_id):
     txn = cur.fetchone()
     if not txn or txn["auto_ignored"] or txn["account_type"] != "BANK" or txn["direction"] != "DEBIT" or txn["status"] != "POSTED":
         return
-    if not txn["recipient_name"] and not txn["recipient_document"]:
+    recipient_name = txn["recipient_name"] or pix_recipient(txn["description"], txn["payment_method"])
+    if not recipient_name and not txn["recipient_document"]:
         return
     mes = str(txn["transaction_date"])[:7]
     cur.execute("SELECT id FROM pluggy_matches WHERE transaction_id=%s", (transaction_id,))
@@ -62,7 +84,7 @@ def auto_match(cur, user_id, transaction_id):
         WHERE r.user_id=%s AND g.user_id=%s""", (user_id, user_id))
     candidates = []
     for rule in cur.fetchall():
-        name_ok = bool(rule["recipient_name"] and norm(rule["recipient_name"]) == norm(txn["recipient_name"]))
+        name_ok = name_matches(rule["recipient_name"], recipient_name)
         doc_ok = bool(rule["recipient_document"] and only_digits(rule["recipient_document"]) == only_digits(txn["recipient_document"]))
         if not (name_ok or doc_ok):
             continue
@@ -123,6 +145,9 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
                 for txn in pluggy.list_transactions(account_id):
                     payment = txn.get("paymentData") or {}
                     receiver = payment.get("receiver") or {}
+                    payment_method = payment.get("paymentMethod") or txn.get("operationType")
+                    recipient_name = receiver.get("name") or pix_recipient(
+                        txn.get("description"), payment_method)
                     doc = receiver.get("documentNumber") or {}
                     doc = doc.get("value", "") if isinstance(doc, dict) else str(doc)
                     try:
@@ -144,8 +169,9 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
                         (txn["id"], item_id, account_id, user_id, day,
                          (txn.get("description") or "")[:500], txn.get("amount") or 0,
                          txn.get("type") or "", txn.get("status") or "",
-                         payment.get("paymentMethod") or txn.get("operationType"),
-                         receiver.get("name"), doc, txn.get("providerId"),
+                         payment_method,
+                         str(recipient_name)[:200] if recipient_name else None,
+                         doc, txn.get("providerId"),
                          txn.get("operationType")))
                     if txn.get("status") != "POSTED":
                         cur.execute("DELETE FROM pluggy_matches WHERE transaction_id=%s AND user_id=%s",
@@ -316,7 +342,8 @@ def create_router(get_db, verify_token):
                 JOIN pluggy_accounts a ON a.id=t.account_id
                 WHERE t.user_id=%s AND t.status='POSTED' AND t.direction='DEBIT'
                 AND a.type='BANK' AND t.auto_ignored=0 AND
-                (t.recipient_name IS NOT NULL OR t.recipient_document IS NOT NULL)""",
+                (t.recipient_name IS NOT NULL OR t.recipient_document IS NOT NULL
+                 OR (t.payment_method='PIX' AND t.description LIKE 'Pix enviado %'))""",
                 (user["id"],))
             for txn in cur.fetchall():
                 auto_match(cur, user["id"], txn["id"])
