@@ -65,6 +65,8 @@ Esse uso pessoal é descrito pela [Pluggy como gratuito](https://meu.pluggy.ai/a
 
 Na aba **Bancos**, escolha o mês no topo e preencha data, descrição, valor e se a movimentação é saída ou entrada. A [Neon informa que envia o extrato oficial em PDF](https://neon.com.br/aprenda/economizar-dinheiro/o-que-extrato-bancario/); esse PDF ainda não é importado diretamente. Se você tiver um CSV com colunas `Data`, `Descrição` e `Valor` (ou `Débito`/`Crédito`), ou OFX com transações `STMTTRN`, pode usar **Importar arquivo**. Valores negativos representam saídas. Revise os lançamentos e associe pagamentos a gastos fixos quando necessário. Reenvios do mesmo arquivo não duplicam as transações; o arquivo é descartado após a leitura. O app não deduz saldo atual a partir de lançamentos ou arquivos manuais.
 
+O item **Fatura Neon** em Fixos é manual: preencha o valor de cada mês como despesa negativa quando souber o valor da fatura. Os outros cartões recebem o valor da fatura da Pluggy quando ele estiver disponível.
+
 ## Ativar HTTPS e conexão direta no app
 
 Quando tiver um domínio com DNS apontado para a VM, rode novamente a instalação com as variáveis abaixo:
