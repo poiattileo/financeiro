@@ -56,9 +56,9 @@ ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
 GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
 FLUSH PRIVILEGES;
 SQL
-mysql "$DB_NAME" < "$APP_DIR/backend/schema_base.sql"
-mysql "$DB_NAME" < "$APP_DIR/backend/pluggy_schema.sql"
-mysql "$DB_NAME" < "$APP_DIR/backend/pluggy_migrations.sql"
+mysql --default-character-set=utf8mb4 "$DB_NAME" < "$APP_DIR/backend/schema_base.sql"
+mysql --default-character-set=utf8mb4 "$DB_NAME" < "$APP_DIR/backend/pluggy_schema.sql"
+mysql --default-character-set=utf8mb4 "$DB_NAME" < "$APP_DIR/backend/pluggy_migrations.sql"
 
 if [ ! -x "$APP_DIR/venv/bin/python" ]; then python3 -m venv "$APP_DIR/venv"; fi
 "$APP_DIR/venv/bin/pip" install --upgrade pip
