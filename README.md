@@ -53,7 +53,7 @@ Abra `http://127.0.0.1:8081` no navegador. O instalador pede usuário e senha; o
 1. Crie uma conta em [Meu Pluggy](https://meu.pluggy.ai/) e conecte ali seus bancos.
 2. Crie uma conta no [Dashboard Pluggy](https://dashboard.pluggy.ai/) e uma aplicação demo. Em **Aplicações**, copie `Client ID` e `Client Secret` (o secret aparece uma única vez).
 3. Na demo da aplicação, conecte **Meu Pluggy** (conector 200), autorize cada banco e copie o **Item ID** mostrado para a conexão. Escolher o banco diretamente no Dashboard é outro fluxo e pode pedir aprovação de produção.
-4. Na VM, edite `/opt/financeiro/backend/.env` e preencha `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`. Reinicie com `sudo systemctl restart financeiro financeiro-pluggy-worker`.
+4. Na VM, rode `sudo bash configurar_pluggy_vm.sh` na pasta clonada. O script pede o Client Secret sem exibi-lo, valida as credenciais e reinicia os serviços. Se o Client ID ainda estiver vazio, também o pedirá. Nunca envie o secret por chat nem o salve no GitHub.
 5. Abra este app como administrador, vá à aba **Bancos** e use **Importar item** para cada Item ID. O app lerá contas e transações e fará novas leituras diariamente. Sem domínio, acesse pelo túnel SSH descrito acima.
 
 Esse uso pessoal é descrito pela [Pluggy como gratuito](https://meu.pluggy.ai/api-guide). O fluxo comercial com usuários de terceiros tem condições diferentes.
