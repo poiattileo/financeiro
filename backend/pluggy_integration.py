@@ -36,10 +36,12 @@ def name_matches(expected, actual):
     return len(norm(expected)) >= 5 and actual_words[:len(expected_words)] == expected_words
 
 
-def pix_recipient(description, payment_method):
-    if str(payment_method or "").upper() != "PIX":
+def pix_recipient(description, payment_method, direction):
+    if str(payment_method or "").upper() != "PIX" or direction != "DEBIT":
         return None
-    match = re.match(r"^\s*pix\s+enviado(?:\s+para)?\s+(.+?)\s*$", description or "", re.I)
+    match = re.match(
+        r"^\s*(?:pix\s+enviado(?:\s+para)?\s+|transfer[êe]ncia\s+enviada(?:\s+pelo\s+pix)?\s*\|\s*)(.+?)\s*$",
+        description or "", re.I)
     return match.group(1).strip()[:200] if match else None
 
 
@@ -73,7 +75,8 @@ def auto_match(cur, user_id, transaction_id):
     txn = cur.fetchone()
     if not txn or txn["auto_ignored"] or txn["account_type"] != "BANK" or txn["direction"] != "DEBIT" or txn["status"] != "POSTED":
         return
-    recipient_name = txn["recipient_name"] or pix_recipient(txn["description"], txn["payment_method"])
+    recipient_name = txn["recipient_name"] or pix_recipient(
+        txn["description"], txn["payment_method"], txn["direction"])
     if not recipient_name and not txn["recipient_document"]:
         return
     mes = str(txn["transaction_date"])[:7]
@@ -147,7 +150,7 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
                     receiver = payment.get("receiver") or {}
                     payment_method = payment.get("paymentMethod") or txn.get("operationType")
                     recipient_name = receiver.get("name") or pix_recipient(
-                        txn.get("description"), payment_method)
+                        txn.get("description"), payment_method, txn.get("type"))
                     doc = receiver.get("documentNumber") or {}
                     doc = doc.get("value", "") if isinstance(doc, dict) else str(doc)
                     try:
@@ -343,7 +346,9 @@ def create_router(get_db, verify_token):
                 WHERE t.user_id=%s AND t.status='POSTED' AND t.direction='DEBIT'
                 AND a.type='BANK' AND t.auto_ignored=0 AND
                 (t.recipient_name IS NOT NULL OR t.recipient_document IS NOT NULL
-                 OR (t.payment_method='PIX' AND t.description LIKE 'Pix enviado %'))""",
+                 OR (t.payment_method='PIX' AND
+                     (t.description LIKE 'Pix enviado %' OR
+                      t.description LIKE 'Transferência enviada%')))""",
                 (user["id"],))
             for txn in cur.fetchall():
                 auto_match(cur, user["id"], txn["id"])
