@@ -12,6 +12,7 @@ Aplicação independente baseada no projeto `poiattileo/financas-app` (revisão 
 - Vincular ou desvincular uma saída manualmente; isso permite registrar pagamentos parciais ou casos ambíguos.
 - Receber eventos de atualização em fila durável e processá-los em serviço separado.
 - Importar um `itemId` já criado no Dashboard pelo conector Meu Pluggy, para uso pessoal. Esses itens também são relidos diariamente como reserva caso não haja webhook público.
+- Importar extratos CSV ou OFX do Neon manualmente, mês a mês, na aba **Bancos**. O arquivo não é guardado; envios repetidos não duplicam movimentações. A conta manual aparece sem saldo e não é sincronizada pela Pluggy.
 
 Os valores planejados originais **não são alterados** pela importação. Isso evita descontar duas vezes uma compra, uma transferência entre contas ou o pagamento de uma fatura. O painel Bancos mostra previsto, pago e restante para os gastos fixos. Saídas de conta e compras no cartão aparecem em totais separados. Um pagamento parcial é exibido como parcial, mas o reconhecimento automático só acontece quando o valor completa o previsto; parcelas parciais podem ser vinculadas manualmente.
 
@@ -57,6 +58,10 @@ Abra `http://127.0.0.1:8081` no navegador. O instalador pede usuário e senha; o
 5. Abra este app como administrador, vá à aba **Bancos** e use **Importar item** para cada Item ID. O app lerá contas e transações e fará novas leituras diariamente. Sem domínio, acesse pelo túnel SSH descrito acima.
 
 Esse uso pessoal é descrito pela [Pluggy como gratuito](https://meu.pluggy.ai/api-guide). O fluxo comercial com usuários de terceiros tem condições diferentes.
+
+## Neon sem conexão automática
+
+Na aba **Bancos**, escolha o mês no topo, baixe o extrato correspondente no Neon e selecione o arquivo em **Neon por extrato**. São aceitos CSV com colunas `Data`, `Descrição` e `Valor` (ou `Débito`/`Crédito`), ou OFX com transações `STMTTRN`. Valores negativos representam saídas. Depois de importar, revise as movimentações e associe pagamentos a gastos fixos quando necessário. Enviar o mesmo extrato novamente não duplica as transações; o arquivo é descartado após a leitura. O app não deduz saldo atual a partir desse arquivo.
 
 ## Ativar HTTPS e conexão direta no app
 

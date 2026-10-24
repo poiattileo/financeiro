@@ -841,6 +841,7 @@ input[type=number]{-moz-appearance:textfield}
         </div>
         <div class="pg-status" id="pg-status">Carregando...</div>
         <div id="pg-import-box" class="pg-card" style="display:none;margin-top:12px"><h3>Já conectou pelo Meu Pluggy?</h3><p style="font-size:12px;color:var(--muted)">No Dashboard, copie o Item ID da conexão Meu Pluggy e importe aqui.</p><div class="pg-form"><div class="field"><label>Item ID</label><input id="pg-import-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div><button class="btn btn-primary" onclick="pgImportItem()">Importar item</button></div></div>
+        <div class="pg-card" style="margin-top:12px"><h3>Neon por extrato</h3><p style="font-size:12px;color:var(--muted)">Baixe o extrato CSV ou OFX no Neon e importe o arquivo do mês selecionado acima. O app não guarda o arquivo e ignora movimentações repetidas. O saldo do Neon não é calculado pelo extrato.</p><div class="pg-form"><div class="field"><label for="pg-manual-file">Extrato Neon (CSV ou OFX, até 5 MB)</label><input id="pg-manual-file" type="file" accept=".csv,.ofx,text/csv"></div><button class="btn btn-primary" onclick="pgImportStatement()">Importar extrato</button></div></div>
         <div class="pg-grid" id="pg-summary"></div>
         <div class="pg-section"><h3>Conexões</h3><div class="pg-list" id="pg-connections"></div></div>
         <div class="pg-section"><h3>Contas conectadas</h3><div class="pg-list" id="pg-accounts"></div></div>

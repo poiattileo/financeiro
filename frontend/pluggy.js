@@ -35,10 +35,10 @@ function pgRender(d){
     <div class="pg-card"><h3>Ainda a pagar</h3><strong>${pgMoney(Math.max(0,planned-paid))}</strong><br><small>Dos gastos fixos cadastrados</small></div>
     <div class="pg-card"><h3>Saídas da conta</h3><strong>${pgMoney(bankOut)}</strong><br><small>Inclui Pix, transferências e pagamento de fatura</small></div>
     <div class="pg-card"><h3>Compras no cartão</h3><strong>${pgMoney(cardOut)}</strong><br><small>Mostradas separadamente para evitar soma duplicada</small></div>`;
-  document.getElementById('pg-connections').innerHTML=d.items.length ? d.items.map(i=>`<div class="pg-row"><div class="pg-row-main"><b>${pgEsc(i.connector_name||'Instituição conectada')}</b><small>Status: ${pgEsc(i.status)} · Última importação: ${pgEsc(i.last_sync||'aguardando')}${i.source==='dashboard'?' · Via Meu Pluggy':''}</small></div>${i.source==='dashboard'?'':`<button class="btn btn-ghost" onclick="pgReconnect('${pgEsc(i.id)}')">Reconectar / autorizar</button>`}</div>`).join('') : '<div class="pg-empty">Nenhuma instituição conectada.</div>';
+  document.getElementById('pg-connections').innerHTML=d.items.length ? d.items.map(i=>`<div class="pg-row"><div class="pg-row-main"><b>${pgEsc(i.connector_name||'Instituição conectada')}</b><small>${i.source==='manual'?'Extrato enviado manualmente':`Status: ${pgEsc(i.status)} · Última importação: ${pgEsc(i.last_sync||'aguardando')}${i.source==='dashboard'?' · Via Meu Pluggy':''}`}</small></div>${i.source==='dashboard'||i.source==='manual'?'':`<button class="btn btn-ghost" onclick="pgReconnect('${pgEsc(i.id)}')">Reconectar / autorizar</button>`}</div>`).join('') : '<div class="pg-empty">Nenhuma instituição conectada.</div>';
   document.getElementById('pg-accounts').innerHTML=d.accounts.length ? d.accounts.map(a=>{
     const item=d.items.find(i=>i.id===a.item_id);
-    return `<div class="pg-row"><div class="pg-row-main"><b>${pgEsc(a.name)}</b><small>${a.type==='CREDIT'?'Cartão':'Conta bancária'} · ${pgEsc(item?.connector_name||'Banco conectado')}</small></div><div class="pg-row-side"><b>${pgMoney(a.balance)}</b><button class="btn btn-ghost" onclick="pgSync('${pgEsc(a.item_id)}')">Sincronizar dados</button></div></div>`;
+    return `<div class="pg-row"><div class="pg-row-main"><b>${pgEsc(a.name)}</b><small>${a.type==='CREDIT'?'Cartão':'Conta bancária'} · ${pgEsc(item?.connector_name||'Banco conectado')}</small></div><div class="pg-row-side"><b>${a.balance==null?'Saldo indisponível':pgMoney(a.balance)}</b>${item?.source==='manual'?'':`<button class="btn btn-ghost" onclick="pgSync('${pgEsc(a.item_id)}')">Sincronizar dados</button>`}</div></div>`;
   }).join('') : '<div class="pg-empty">Nenhuma conta conectada ainda.</div>';
   document.getElementById('pg-forecasts').innerHTML=d.forecasts.length ? d.forecasts.map(f=>{
     const state=f.remaining<=0.01?'Pago':f.paid>0?'Parcial':'A pagar';
@@ -96,6 +96,22 @@ async function pgImportItem(){
   pgStatus('Importando conexão do Meu Pluggy...');
   try{await api('POST','/pluggy/import-item',{item_id});document.getElementById('pg-import-id').value='';await pgLoad();}
   catch(e){pgStatus('Falha ao importar item: '+e.message);}
+}
+async function pgImportStatement(){
+  const input=document.getElementById('pg-manual-file');
+  const file=input.files?.[0];
+  if(!file){pgStatus('Selecione o extrato do Neon.');return;}
+  if(!/\.(csv|ofx)$/i.test(file.name)||file.size>5*1024*1024){pgStatus('Escolha um CSV ou OFX de até 5 MB.');return;}
+  const form=new FormData();form.append('month',pgMonth());form.append('file',file);
+  pgStatus('Importando extrato do Neon...');
+  try{
+    const response=await fetch('/api/pluggy/manual-import',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.detail||'Falha na importação');
+    input.value='';
+    await pgLoad();
+    pgStatus(`Neon: ${result.imported} movimentações importadas, ${result.duplicates} já existentes no mês ${result.month}.`);
+  }catch(e){pgStatus('Falha ao importar extrato: '+e.message);}
 }
 async function pgSaveRule(){
   const gasto_id=Number(document.getElementById('pg-rule-gasto').value);

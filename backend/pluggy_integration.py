@@ -8,10 +8,11 @@ import hmac
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 import pluggy_client as pluggy
+from manual_statement import parse_statement
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +213,50 @@ class CategoryInput(BaseModel):
 
 def create_router(get_db, verify_token):
     router = APIRouter(prefix="/api/pluggy")
+
+    @router.post("/manual-import")
+    async def manual_import(month: str = Form(...), file: UploadFile = File(...),
+                            user=Depends(verify_token)):
+        try:
+            raw = await file.read(5 * 1024 * 1024 + 1)
+            rows = parse_statement(raw, file.filename or "", month, f"neon:{user['id']}")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        finally:
+            await file.close()
+        item_id = f"manual:neon:{user['id']}"
+        account_id = f"{item_id}:bank"
+        db = get_db(); cur = db.cursor(dictionary=True)
+        try:
+            db.start_transaction()
+            cur.execute("""INSERT INTO pluggy_items
+                (id,user_id,connector_name,status,source,last_sync)
+                VALUES (%s,%s,'Neon (manual)','MANUAL','manual',NULL)
+                ON DUPLICATE KEY UPDATE connector_name=VALUES(connector_name)""",
+                (item_id, user["id"]))
+            cur.execute("""INSERT INTO pluggy_accounts
+                (id,item_id,user_id,name,type,balance,currency_code)
+                VALUES (%s,%s,%s,'Neon (extrato)','BANK',NULL,'BRL')
+                ON DUPLICATE KEY UPDATE name=VALUES(name),balance=NULL""",
+                (account_id, item_id, user["id"]))
+            inserted = 0
+            for row in rows:
+                cur.execute("""INSERT IGNORE INTO pluggy_transactions
+                    (id,item_id,account_id,user_id,transaction_date,description,amount,
+                     direction,status,payment_method)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'POSTED','EXTRATO')""",
+                    (row["id"], item_id, account_id, user["id"], row["date"],
+                     row["description"], abs(row["amount"]), row["direction"]))
+                if cur.rowcount:
+                    inserted += 1
+            db.commit()
+            return {"month": month, "found": len(rows), "imported": inserted,
+                    "duplicates": len(rows) - inserted}
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            cur.close(); db.close()
 
     @router.get("/status")
     def status(user=Depends(verify_token)):
