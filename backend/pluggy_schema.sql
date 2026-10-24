@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS pluggy_transactions (
   amount DECIMAL(15,2) NOT NULL,
   direction VARCHAR(10) NOT NULL,
   status VARCHAR(20) NOT NULL,
-  payment_method VARCHAR(30) NULL,
+  payment_method VARCHAR(80) NULL,
   recipient_name VARCHAR(200) NULL,
   recipient_document VARCHAR(40) NULL,
   provider_id VARCHAR(160) NULL,
