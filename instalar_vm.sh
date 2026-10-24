@@ -28,6 +28,7 @@ fi
 
 cp "$SRC_DIR"/backend/*.py "$SRC_DIR"/backend/*.sql "$APP_DIR/backend/"
 cp "$SRC_DIR"/backend/*.sh "$APP_DIR/backend/"
+cp "$SRC_DIR"/backend/requirements.txt "$APP_DIR/backend/"
 cp "$SRC_DIR"/frontend/* "$APP_DIR/frontend/"
 
 if [ ! -f "$ENV_FILE" ]; then
