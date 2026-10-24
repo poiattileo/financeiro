@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS pluggy_items (
   id VARCHAR(64) PRIMARY KEY,
   user_id INT NOT NULL,
   connector_name VARCHAR(160) DEFAULT '',
+  display_name VARCHAR(160) NULL,
   source VARCHAR(20) NOT NULL DEFAULT 'widget',
   status VARCHAR(40) DEFAULT 'CONNECTING',
   last_sync DATETIME NULL,
@@ -86,4 +87,28 @@ CREATE TABLE IF NOT EXISTS pluggy_webhook_events (
   last_error VARCHAR(300) NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_pwe_queue (state, next_attempt)
+);
+
+CREATE TABLE IF NOT EXISTS pluggy_card_bills (
+  id VARCHAR(64) PRIMARY KEY,
+  account_id VARCHAR(64) NOT NULL,
+  item_id VARCHAR(64) NOT NULL,
+  user_id INT NOT NULL,
+  due_date DATE NOT NULL,
+  total_amount DECIMAL(15,2) NOT NULL,
+  paid_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_pcb_user_due (user_id,due_date),
+  FOREIGN KEY (account_id) REFERENCES pluggy_accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES pluggy_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS pluggy_bill_gastos (
+  account_id VARCHAR(64) PRIMARY KEY,
+  gasto_id INT NOT NULL UNIQUE,
+  user_id INT NOT NULL,
+  FOREIGN KEY (account_id) REFERENCES pluggy_accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (gasto_id) REFERENCES gastos(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );

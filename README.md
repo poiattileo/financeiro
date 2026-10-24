@@ -1,12 +1,14 @@
 # Financeiro com Pluggy
 
-Aplicação independente baseada no projeto `poiattileo/financas-app` (revisão `f012506`). Mantém as telas e funções existentes (salário, fixos, parcelas, lançamentos, metas, registros, histórico, anotações, admin e bot Telegram opcional) e acrescenta a aba **Bancos** com Pluggy.
+Aplicação independente baseada no projeto `poiattileo/financas-app` (revisão `f012506`). Mantém salário, fixos, parcelas, metas, histórico, anotações e administração. A navegação removeu as páginas Lançar, Registros, Times e Análise e acrescentou **Dashboard** e **Bancos**.
 
 ## O que já funciona
 
 - Conectar uma instituição pelo Pluggy Connect.
 - Importar contas e transações com `GET /v2/transactions` e paginação por cursor.
 - Mostrar extrato, saldos sincronizados, saídas bancárias e compras de cartão separadamente.
+- Filtrar o Dashboard por período, banco, conta, tipo, direção, situação, categoria, forma de pagamento e texto, com visão por banco, categoria, mês e faturas.
+- Criar um gasto fixo por cartão conectado e preencher cada mês com o valor de fatura efetivamente informado pela Pluggy. Meses sem fatura publicada ficam sem valor; valores editados manualmente são preservados.
 - Categorizar movimentações e comparar saídas por categoria sem somar conta e cartão duas vezes.
 - Cadastrar uma regra de destinatário para um gasto fixo. Quando um Pix/saída bancária efetivada corresponde ao destinatário, ao valor previsto e ao mês, ela é vinculada e o gasto aparece como pago.
 - Vincular ou desvincular uma saída manualmente; isso permite registrar pagamentos parciais ou casos ambíguos.
@@ -14,7 +16,7 @@ Aplicação independente baseada no projeto `poiattileo/financas-app` (revisão 
 - Importar um `itemId` já criado no Dashboard pelo conector Meu Pluggy, para uso pessoal. Esses itens também são relidos diariamente como reserva caso não haja webhook público.
 - Registrar saídas e entradas do Neon manualmente, mês a mês, na aba **Bancos**. Também aceita CSV ou OFX, caso você tenha esses formatos. O arquivo não é guardado; envios repetidos não duplicam movimentações. A conta manual aparece sem saldo e não é sincronizada pela Pluggy.
 
-Os valores planejados originais **não são alterados** pela importação. Isso evita descontar duas vezes uma compra, uma transferência entre contas ou o pagamento de uma fatura. O painel Bancos mostra previsto, pago e restante para os gastos fixos. Saídas de conta e compras no cartão aparecem em totais separados. Um pagamento parcial é exibido como parcial, mas o reconhecimento automático só acontece quando o valor completa o previsto; parcelas parciais podem ser vinculadas manualmente.
+Os gastos fixos criados manualmente pelo usuário **não são alterados** pela importação de movimentações. A exceção são os gastos fixos de faturas vinculados a cartões: recebem o valor da fatura informada pela Pluggy quando ela fica disponível, preservando um valor que o usuário tenha editado. Compras no cartão e pagamentos de fatura aparecem em totais separados para evitar soma dupla. O painel Bancos mostra previsto, pago e restante. Pagamentos parciais podem ser vinculados manualmente.
 
 ## Requisitos
 

@@ -606,6 +606,24 @@ input[type=number]{-moz-appearance:textfield}
 .pg-form{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.pg-form .field{min-width:160px;flex:1}
 .pg-empty{color:var(--muted);font-size:13px;padding:12px}
 .pg-status{font-size:12px;color:var(--muted);margin:8px 0}
+.dash-wrap{flex:1;min-height:0;width:100%;max-width:1280px;margin:0 auto;padding:22px 16px 90px;overflow-y:auto}
+.dash-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.dash-title h2{font-size:23px;margin:0 0 4px}.dash-title p{font-size:12px;color:var(--muted);margin:0}
+.dash-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;align-items:end}
+.dash-filters label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+.dash-filters input,.dash-filters select{width:100%;min-width:0;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px 9px;font-size:12px}
+.dash-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:16px 0}
+.dash-metric{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:14px}
+.dash-metric small{display:block;color:var(--muted);font-size:11px}.dash-metric strong{display:block;font-size:20px;margin-top:5px}
+.dash-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.dash-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px;margin:12px 0}
+.dash-panel h3{font-size:15px;margin:0 0 12px}.dash-note{font-size:11px;color:var(--muted);margin:7px 0}
+.dash-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border);font-size:12px;align-items:center}
+.dash-row:first-of-type{border-top:0}.dash-row small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.dash-bar{height:5px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:6px}.dash-bar span{display:block;height:100%;background:var(--blue);border-radius:4px}
+.dash-list{display:grid;gap:8px}.dash-txn{display:flex;justify-content:space-between;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:12px}
+.dash-txn b{font-size:12px}.dash-txn small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.dash-txn strong{white-space:nowrap}
+@media(max-width:760px){.dash-two{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -658,14 +676,35 @@ input[type=number]{-moz-appearance:textfield}
   </div>
 
   <div class="body">
-    <div class="page active" id="tab-gastos">
+    <div class="page active" id="tab-dashboard">
+      <div class="dash-wrap">
+        <div class="dash-title"><div><h2>Dashboard financeiro</h2><p>Filtre as movimentações conectadas pela Pluggy e os lançamentos manuais do Neon.</p></div><button class="btn btn-ghost" onclick="dashLoad()">Atualizar painel</button></div>
+        <div class="dash-panel"><h3>Filtros</h3><div class="dash-filters">
+          <div><label for="dash-from">De</label><input type="date" id="dash-from"></div>
+          <div><label for="dash-to">Até</label><input type="date" id="dash-to"></div>
+          <div><label for="dash-bank">Banco</label><select id="dash-bank" onchange="dashBankChanged()"><option value="">Todos os bancos</option></select></div>
+          <div><label for="dash-account">Conta ou cartão</label><select id="dash-account" onchange="dashRender()"><option value="">Todas as contas</option></select></div>
+          <div><label for="dash-type">Origem</label><select id="dash-type" onchange="dashRender()"><option value="">Conta e cartão</option><option value="BANK">Conta bancária</option><option value="CREDIT">Cartão de crédito</option></select></div>
+          <div><label for="dash-direction">Movimento</label><select id="dash-direction" onchange="dashRender()"><option value="">Entradas e saídas</option><option value="DEBIT">Saídas</option><option value="CREDIT">Entradas / estornos</option></select></div>
+          <div><label for="dash-status">Situação</label><select id="dash-status" onchange="dashRender()"><option value="">Todos</option><option value="POSTED">Efetivados</option><option value="PENDING">Pendentes</option></select></div>
+          <div><label for="dash-category">Categoria</label><select id="dash-category" onchange="dashRender()"><option value="">Todas</option></select></div>
+          <div><label for="dash-method">Forma</label><select id="dash-method" onchange="dashRender()"><option value="">Todas</option><option value="PIX">Pix</option><option value="TRANSFER">Transferências</option><option value="CARD">Cartão</option><option value="OTHER">Outras</option></select></div>
+          <div><label for="dash-search">Buscar</label><input id="dash-search" placeholder="Descrição ou destinatário" oninput="dashRender()"></div>
+          <button class="btn btn-primary" onclick="dashLoad()">Aplicar período</button><button class="btn btn-ghost" onclick="dashReset()">Limpar filtros</button>
+        </div><div class="dash-note" id="dash-status-text">Carregando painel...</div></div>
+        <div class="dash-metrics" id="dash-metrics"></div>
+        <div class="dash-two"><div class="dash-panel"><h3>Bancos</h3><div id="dash-banks"></div></div><div class="dash-panel"><h3>Gastos por categoria</h3><div id="dash-categories"></div></div></div>
+        <div class="dash-two"><div class="dash-panel"><h3>Faturas</h3><div id="dash-bills"></div></div><div class="dash-panel"><h3>Evolução mensal</h3><div id="dash-months"></div></div></div>
+        <div class="dash-panel"><h3>Movimentações</h3><p class="dash-note" id="dash-count"></p><div class="dash-list" id="dash-transactions"></div><button class="btn btn-ghost" id="dash-more" onclick="dashMore()" style="display:none;margin-top:12px">Mostrar mais</button></div>
+      </div>
+    </div>
+    <div class="page" id="tab-gastos">
       <div class="toolbar">
         <button class="btn btn-ghost" onclick="mudarMes(-1)" title="Voltar um mês">‹</button>
         <span id="mes-trab-label" style="font-size:12px;font-weight:600;color:var(--muted);text-transform:capitalize;white-space:nowrap"></span>
         <button class="btn btn-ghost" onclick="mudarMes(1)" title="Avançar um mês">›</button>
         <button class="btn btn-primary" onclick="openModalGasto()">+ Fixo</button>
         <button class="btn btn-purple" onclick="openModalParcela()">⊕ Parcelado</button>
-        <button class="btn btn-orange" onclick="openModalLanc()">⚡ Lançar</button>
         <button class="btn btn-ghost" onclick="openModalRelatorio()" style="color:var(--green);border-color:rgba(37,211,102,.3);background:rgba(37,211,102,.08)">📱 Relatório WhatsApp</button>
       </div>
       <div class="sobra-banner" id="sobra-banner"></div>
@@ -863,17 +902,14 @@ input[type=number]{-moz-appearance:textfield}
   </div>
 
   <nav class="bottom-nav" id="bottom-nav">
-    <button class="bn-item active" onclick="goTab('gastos')" id="bn-gastos">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Fixos
+    <button class="bn-item active" onclick="goTab('dashboard')" id="bn-dashboard">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard
     </button>
-    <button class="bn-item" onclick="goTab('lancamentos')" id="bn-lancamentos">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Lançar
+    <button class="bn-item" onclick="goTab('gastos')" id="bn-gastos">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Fixos
     </button>
     <button class="bn-item" onclick="goTab('metas')" id="bn-metas">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Metas
-    </button>
-    <button class="bn-item" onclick="goTab('comparativo')" id="bn-comparativo">
-      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Análise
     </button>
     <button class="bn-item" onclick="goTab('historico')" id="bn-historico">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Histórico
@@ -883,12 +919,6 @@ input[type=number]{-moz-appearance:textfield}
     </button>
     <button class="bn-item" onclick="goTab('resumo')" id="bn-resumo">
       <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Resumo
-    </button>
-    <button class="bn-item" onclick="goTab('lrapidos')" id="bn-lrapidos">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Registros
-    </button>
-    <button class="bn-item" onclick="goTab('sorteio')" id="bn-sorteio">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg>⚽ Times
     </button>
     <button class="bn-item" onclick="goTab('bancos')" id="bn-bancos">
       <svg viewBox="0 0 24 24"><rect x="2" y="10" width="20" height="11"/><path d="M2 10l10-7 10 7M6 10v11m6-11v11m6-11v11"/></svg>Bancos
@@ -1867,6 +1897,7 @@ async function iniciarApp(){
     document.getElementById('bn-admin').style.display='flex';
   }
   await carregarTudo();
+  goTab('dashboard');
 }
 async function buscarTudo(){
   return Promise.all([
@@ -1942,6 +1973,7 @@ setInterval(verificarAtualizacoes, AUTO_MS);
 
 // ── TABS ──
 function goTab(id){
+  if(!['dashboard','gastos','metas','historico','anotacoes','resumo','bancos','admin'].includes(id))return;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
@@ -1956,6 +1988,7 @@ function goTab(id){
   if(id==='sorteio')initSorteio();
   if(id==='lrapidos'){carregarTodosLancamentos().then(()=>renderAbaLR());}
   if(id==='bancos')pgLoad();
+  if(id==='dashboard')dashLoad();
 }
 function atualizarBadge(){const q=Math.max(0,idxTrabalho()),btn=document.getElementById('bn-historico');const old=btn?.querySelector('.bn-badge');if(old)old.remove();if(q>0){const b=document.createElement('span');b.className='bn-badge';b.textContent=q;btn?.appendChild(b);}}
 
@@ -4288,5 +4321,6 @@ window.addEventListener('resize',()=>{if(document.getElementById('tab-resumo').c
 </script>
 <script src="https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js" defer></script>
 <script src="/pluggy.js" defer></script>
+<script src="/dashboard.js" defer></script>
 </body>
 </html>

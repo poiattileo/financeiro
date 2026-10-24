@@ -159,3 +159,5 @@ INSERT IGNORE INTO categorias (nome,label,emoji,cor,tipo) VALUES
 ('roupas',      'Roupas',       '👕','#e879f9','ambos'),
 ('lazer',       'Lazer',        '🎮','#c084fc','lancamento'),
 ('outros',      'Outros',       '💳','#94a3b8','ambos');
+INSERT IGNORE INTO categorias (nome,label,emoji,cor,tipo) VALUES
+('cartao', 'Fatura de cartão', '💳', '#818cf8', 'gasto');

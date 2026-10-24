@@ -7,7 +7,7 @@ import unicodedata
 import hmac
 import uuid
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -115,6 +115,61 @@ def auto_match(cur, user_id, transaction_id):
             WHERE t.id=%s AND t.user_id=%s""", (candidates[0], transaction_id, user_id))
 
 
+def sync_card_bills(cur, account, item_id, user_id, item_label):
+    """Keep bill amounts by due month; preserve any value edited by the user."""
+    account_id = account["id"]
+    cur.execute("SELECT gasto_id FROM pluggy_bill_gastos WHERE account_id=%s AND user_id=%s",
+                (account_id, user_id))
+    mapping = cur.fetchone()
+    if mapping:
+        gasto_id = mapping["gasto_id"]
+    else:
+        name = "Fatura " + (item_label or account.get("name") or "cartão")
+        cur.execute("INSERT INTO gastos (user_id,nome,cat) VALUES (%s,%s,'cartao')",
+                    (user_id, name[:100]))
+        gasto_id = cur.lastrowid
+        cur.execute("INSERT INTO pluggy_bill_gastos (account_id,gasto_id,user_id) VALUES (%s,%s,%s)",
+                    (account_id, gasto_id, user_id))
+    cur.execute("SELECT mes_inicio FROM usuarios WHERE id=%s", (user_id,))
+    base = (cur.fetchone() or {}).get("mes_inicio") or ""
+    page = 1
+    while True:
+        data = pluggy.request("GET", "/bills", params={"accountId": account_id,
+                                                  "page": page, "pageSize": 100})
+        for bill in data.get("results", []):
+            try:
+                due = local_date(bill.get("dueDate"))
+                amount = Decimal(str(bill.get("totalAmount") or 0)).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP)
+                paid = sum((Decimal(str(p.get("amount") or 0)) for p in bill.get("payments") or []),
+                           Decimal("0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            except (ValueError, ArithmeticError):
+                continue
+            cur.execute("SELECT total_amount FROM pluggy_card_bills WHERE id=%s AND user_id=%s",
+                        (bill["id"], user_id))
+            previous = cur.fetchone()
+            cur.execute("""INSERT INTO pluggy_card_bills
+                (id,account_id,item_id,user_id,due_date,total_amount,paid_amount)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON DUPLICATE KEY UPDATE due_date=VALUES(due_date),
+                total_amount=VALUES(total_amount),paid_amount=VALUES(paid_amount)""",
+                (bill["id"], account_id, item_id, user_id, due, amount, paid))
+            if amount <= 0 or not re.fullmatch(r"\d{4}-\d{2}", base):
+                continue
+            idx = (int(due[:4]) - int(base[:4])) * 12 + int(due[5:7]) - int(base[5:7])
+            if not 0 <= idx < 48:
+                continue
+            cur.execute("SELECT valor FROM gasto_valores WHERE gasto_id=%s AND idx=%s",
+                        (gasto_id, idx))
+            current = cur.fetchone()
+            if not current or (previous and Decimal(str(current["valor"])) == -Decimal(str(previous["total_amount"]))):
+                cur.execute("""INSERT INTO gasto_valores (gasto_id,idx,valor) VALUES (%s,%s,%s)
+                    ON DUPLICATE KEY UPDATE valor=VALUES(valor)""", (gasto_id, idx, -amount))
+        if page >= int(data.get("totalPages") or 1):
+            break
+        page += 1
+
+
 def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
     item = pluggy.request("GET", "/items/" + item_id)
     db = get_db()
@@ -134,6 +189,9 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
             connector_name=VALUES(connector_name), status=VALUES(status)""",
             (item_id, user_id, name, item.get("status", "CONNECTED"),
              "dashboard" if allow_unlinked and external_id != f"financas:{user_id}" else "widget"))
+        cur.execute("SELECT display_name FROM pluggy_items WHERE id=%s AND user_id=%s",
+                    (item_id, user_id))
+        item_label = (cur.fetchone() or {}).get("display_name")
         page = 1
         while True:
             account_page = pluggy.request("GET", "/accounts", params={"itemId": item_id, "page": page})
@@ -182,6 +240,11 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
                         cur.execute("DELETE FROM pluggy_matches WHERE transaction_id=%s AND user_id=%s",
                                     (txn["id"], user_id))
                     auto_match(cur, user_id, txn["id"])
+                if account.get("type") == "CREDIT":
+                    try:
+                        sync_card_bills(cur, account, item_id, user_id, item_label)
+                    except pluggy.PluggyError:
+                        log.warning("Bills unavailable for account %s", account_id)
             if page >= int(account_page.get("totalPages") or 1):
                 break
             page += 1
@@ -219,6 +282,10 @@ class ManualEntryInput(BaseModel):
     direction: str
 
 
+class ItemLabelInput(BaseModel):
+    display_name: str = Field(min_length=2, max_length=160)
+
+
 def ensure_manual_neon(cur, user_id):
     item_id = f"manual:neon:{user_id}"
     account_id = f"{item_id}:bank"
@@ -237,6 +304,64 @@ def ensure_manual_neon(cur, user_id):
 
 def create_router(get_db, verify_token):
     router = APIRouter(prefix="/api/pluggy")
+
+    @router.put("/items/{item_id}/label")
+    def label_item(item_id: str, data: ItemLabelInput, user=Depends(verify_token)):
+        db = get_db(); cur = db.cursor()
+        try:
+            cur.execute("UPDATE pluggy_items SET display_name=%s WHERE id=%s AND user_id=%s",
+                        (data.display_name.strip(), item_id, user["id"]))
+            if not cur.rowcount:
+                raise HTTPException(404, "Banco não encontrado")
+            return {"ok": True}
+        finally:
+            cur.close(); db.close()
+
+    @router.get("/analytics")
+    def analytics(from_date: date, to_date: date, user=Depends(verify_token)):
+        if to_date < from_date or (to_date - from_date).days > 366:
+            raise HTTPException(400, "Selecione um período de até 12 meses")
+        db = get_db(); cur = db.cursor(dictionary=True)
+        try:
+            cur.execute("""SELECT id,display_name,connector_name,source,status,last_sync
+                FROM pluggy_items WHERE user_id=%s ORDER BY display_name,id""", (user["id"],))
+            items = cur.fetchall()
+            cur.execute("""SELECT id,item_id,name,type,balance FROM pluggy_accounts
+                WHERE user_id=%s ORDER BY name""", (user["id"],))
+            accounts = cur.fetchall()
+            cur.execute("SELECT nome,label FROM categorias ORDER BY label")
+            categories = cur.fetchall()
+            cur.execute("""SELECT t.id,t.item_id,t.account_id,t.transaction_date,t.description,
+                t.amount,t.direction,t.status,t.payment_method,t.recipient_name,t.user_category,
+                a.name AS account_name,a.type AS account_type
+                FROM pluggy_transactions t JOIN pluggy_accounts a ON a.id=t.account_id
+                WHERE t.user_id=%s AND t.transaction_date BETWEEN %s AND %s
+                ORDER BY t.transaction_date DESC,t.id DESC LIMIT 20001""",
+                (user["id"], from_date, to_date))
+            transactions = cur.fetchall()
+            truncated = len(transactions) > 20000
+            transactions = transactions[:20000]
+            cur.execute("""SELECT b.id,b.account_id,b.item_id,b.due_date,b.total_amount,
+                b.paid_amount,a.name AS account_name
+                FROM pluggy_card_bills b JOIN pluggy_accounts a ON a.id=b.account_id
+                WHERE b.user_id=%s AND b.due_date BETWEEN %s AND %s
+                ORDER BY b.due_date DESC""", (user["id"], from_date, to_date))
+            bills = cur.fetchall()
+            for row in items:
+                row["last_sync"] = row["last_sync"].isoformat() if row["last_sync"] else None
+            for row in accounts:
+                row["balance"] = float(row["balance"]) if row["balance"] is not None else None
+            for row in transactions:
+                row["amount"] = float(row["amount"])
+                row["transaction_date"] = row["transaction_date"].isoformat()
+            for row in bills:
+                row["due_date"] = row["due_date"].isoformat()
+                row["total_amount"] = float(row["total_amount"])
+                row["paid_amount"] = float(row["paid_amount"])
+            return {"items": items, "accounts": accounts, "categories": categories,
+                    "transactions": transactions, "bills": bills, "truncated": truncated}
+        finally:
+            cur.close(); db.close()
 
     @router.post("/manual-import")
     async def manual_import(month: str = Form(...), file: UploadFile = File(...),
@@ -400,6 +525,14 @@ def create_router(get_db, verify_token):
                 GROUP BY m.gasto_id""", (user["id"], month))
             for row in cur.fetchall():
                 paid[row["gasto_id"]] = Decimal(str(row["paid"]))
+            cur.execute("""SELECT bg.gasto_id,
+                COALESCE(SUM(LEAST(b.total_amount,b.paid_amount)),0) AS paid
+                FROM pluggy_card_bills b JOIN pluggy_bill_gastos bg ON bg.account_id=b.account_id
+                WHERE b.user_id=%s AND b.due_date >= %s AND b.due_date < %s
+                GROUP BY bg.gasto_id""", (user["id"], month_start, next_month_start))
+            for row in cur.fetchall():
+                paid[row["gasto_id"]] = max(paid.get(row["gasto_id"], Decimal("0")),
+                                            Decimal(str(row["paid"])))
             forecasts = []
             for gasto in gastos:
                 expected = expected_amount(cur, user["id"], gasto["id"], month)
