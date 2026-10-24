@@ -5,6 +5,7 @@ import os
 import re
 import unicodedata
 import hmac
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -211,6 +212,29 @@ class CategoryInput(BaseModel):
     category: str = Field(max_length=50)
 
 
+class ManualEntryInput(BaseModel):
+    transaction_date: date
+    description: str = Field(min_length=2, max_length=500)
+    amount: Decimal = Field(gt=0, le=Decimal("9999999999999.99"))
+    direction: str
+
+
+def ensure_manual_neon(cur, user_id):
+    item_id = f"manual:neon:{user_id}"
+    account_id = f"{item_id}:bank"
+    cur.execute("""INSERT INTO pluggy_items
+        (id,user_id,connector_name,status,source,last_sync)
+        VALUES (%s,%s,'Neon (manual)','MANUAL','manual',NULL)
+        ON DUPLICATE KEY UPDATE connector_name=VALUES(connector_name)""",
+        (item_id, user_id))
+    cur.execute("""INSERT INTO pluggy_accounts
+        (id,item_id,user_id,name,type,balance,currency_code)
+        VALUES (%s,%s,%s,'Neon (manual)','BANK',NULL,'BRL')
+        ON DUPLICATE KEY UPDATE name=VALUES(name),balance=NULL""",
+        (account_id, item_id, user_id))
+    return item_id, account_id
+
+
 def create_router(get_db, verify_token):
     router = APIRouter(prefix="/api/pluggy")
 
@@ -224,21 +248,10 @@ def create_router(get_db, verify_token):
             raise HTTPException(400, str(exc)) from exc
         finally:
             await file.close()
-        item_id = f"manual:neon:{user['id']}"
-        account_id = f"{item_id}:bank"
         db = get_db(); cur = db.cursor(dictionary=True)
         try:
             db.start_transaction()
-            cur.execute("""INSERT INTO pluggy_items
-                (id,user_id,connector_name,status,source,last_sync)
-                VALUES (%s,%s,'Neon (manual)','MANUAL','manual',NULL)
-                ON DUPLICATE KEY UPDATE connector_name=VALUES(connector_name)""",
-                (item_id, user["id"]))
-            cur.execute("""INSERT INTO pluggy_accounts
-                (id,item_id,user_id,name,type,balance,currency_code)
-                VALUES (%s,%s,%s,'Neon (extrato)','BANK',NULL,'BRL')
-                ON DUPLICATE KEY UPDATE name=VALUES(name),balance=NULL""",
-                (account_id, item_id, user["id"]))
+            item_id, account_id = ensure_manual_neon(cur, user["id"])
             inserted = 0
             for row in rows:
                 cur.execute("""INSERT IGNORE INTO pluggy_transactions
@@ -255,6 +268,46 @@ def create_router(get_db, verify_token):
         except Exception:
             db.rollback()
             raise
+        finally:
+            cur.close(); db.close()
+
+    @router.post("/manual-entry")
+    def manual_entry(data: ManualEntryInput, user=Depends(verify_token)):
+        if data.direction not in ("DEBIT", "CREDIT"):
+            raise HTTPException(400, "Escolha saída ou entrada")
+        if len(data.description.strip()) < 2:
+            raise HTTPException(400, "Informe a descrição")
+        db = get_db(); cur = db.cursor(dictionary=True)
+        try:
+            db.start_transaction()
+            item_id, account_id = ensure_manual_neon(cur, user["id"])
+            transaction_id = "manual:" + uuid.uuid4().hex
+            cur.execute("""INSERT INTO pluggy_transactions
+                (id,item_id,account_id,user_id,transaction_date,description,amount,
+                 direction,status,payment_method)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'POSTED','MANUAL')""",
+                (transaction_id, item_id, account_id, user["id"],
+                 data.transaction_date, data.description.strip(), data.amount,
+                 data.direction))
+            db.commit()
+            return {"id": transaction_id}
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            cur.close(); db.close()
+
+    @router.delete("/manual-entry/{transaction_id}")
+    def delete_manual_entry(transaction_id: str, user=Depends(verify_token)):
+        db = get_db(); cur = db.cursor(dictionary=True)
+        try:
+            cur.execute("""DELETE t FROM pluggy_transactions t
+                JOIN pluggy_items i ON i.id=t.item_id
+                WHERE t.id=%s AND t.user_id=%s AND i.user_id=%s AND i.source='manual'""",
+                (transaction_id, user["id"], user["id"]))
+            if not cur.rowcount:
+                raise HTTPException(404, "Lançamento manual não encontrado")
+            return {"deleted": True}
         finally:
             cur.close(); db.close()
 

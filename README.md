@@ -12,7 +12,7 @@ Aplicação independente baseada no projeto `poiattileo/financas-app` (revisão 
 - Vincular ou desvincular uma saída manualmente; isso permite registrar pagamentos parciais ou casos ambíguos.
 - Receber eventos de atualização em fila durável e processá-los em serviço separado.
 - Importar um `itemId` já criado no Dashboard pelo conector Meu Pluggy, para uso pessoal. Esses itens também são relidos diariamente como reserva caso não haja webhook público.
-- Importar extratos CSV ou OFX do Neon manualmente, mês a mês, na aba **Bancos**. O arquivo não é guardado; envios repetidos não duplicam movimentações. A conta manual aparece sem saldo e não é sincronizada pela Pluggy.
+- Registrar saídas e entradas do Neon manualmente, mês a mês, na aba **Bancos**. Também aceita CSV ou OFX, caso você tenha esses formatos. O arquivo não é guardado; envios repetidos não duplicam movimentações. A conta manual aparece sem saldo e não é sincronizada pela Pluggy.
 
 Os valores planejados originais **não são alterados** pela importação. Isso evita descontar duas vezes uma compra, uma transferência entre contas ou o pagamento de uma fatura. O painel Bancos mostra previsto, pago e restante para os gastos fixos. Saídas de conta e compras no cartão aparecem em totais separados. Um pagamento parcial é exibido como parcial, mas o reconhecimento automático só acontece quando o valor completa o previsto; parcelas parciais podem ser vinculadas manualmente.
 
@@ -61,7 +61,7 @@ Esse uso pessoal é descrito pela [Pluggy como gratuito](https://meu.pluggy.ai/a
 
 ## Neon sem conexão automática
 
-Na aba **Bancos**, escolha o mês no topo, baixe o extrato correspondente no Neon e selecione o arquivo em **Neon por extrato**. São aceitos CSV com colunas `Data`, `Descrição` e `Valor` (ou `Débito`/`Crédito`), ou OFX com transações `STMTTRN`. Valores negativos representam saídas. Depois de importar, revise as movimentações e associe pagamentos a gastos fixos quando necessário. Enviar o mesmo extrato novamente não duplica as transações; o arquivo é descartado após a leitura. O app não deduz saldo atual a partir desse arquivo.
+Na aba **Bancos**, escolha o mês no topo e preencha data, descrição, valor e se a movimentação é saída ou entrada. A [Neon informa que envia o extrato oficial em PDF](https://neon.com.br/aprenda/economizar-dinheiro/o-que-extrato-bancario/); esse PDF ainda não é importado diretamente. Se você tiver um CSV com colunas `Data`, `Descrição` e `Valor` (ou `Débito`/`Crédito`), ou OFX com transações `STMTTRN`, pode usar **Importar arquivo**. Valores negativos representam saídas. Revise os lançamentos e associe pagamentos a gastos fixos quando necessário. Reenvios do mesmo arquivo não duplicam as transações; o arquivo é descartado após a leitura. O app não deduz saldo atual a partir de lançamentos ou arquivos manuais.
 
 ## Ativar HTTPS e conexão direta no app
 

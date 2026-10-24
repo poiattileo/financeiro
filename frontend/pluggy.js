@@ -11,6 +11,11 @@ async function pgLoad(){
   if(!token)return;
   const input=document.getElementById('pg-month');
   if(!input.value){const d=new Date();input.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+  const manualDate=document.getElementById('pg-manual-date');
+  if(!manualDate.value||manualDate.value.slice(0,7)!==input.value){
+    const today=new Date();const localToday=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    manualDate.value=localToday.slice(0,7)===input.value?localToday:input.value+'-01';
+  }
   pgStatus('Carregando bancos e movimentações...');
   try{
     const [status,data]=await Promise.all([api('GET','/pluggy/status'),api('GET','/pluggy/dashboard?month='+encodeURIComponent(pgMonth()))]);
@@ -58,9 +63,10 @@ function pgRender(d){
     const canLink=t.account_type==='BANK' && debit && t.status==='POSTED';
     const options=d.forecasts.map(f=>`<option value="${f.gasto_id}">${pgEsc(f.name)}</option>`).join('');
     const action=t.matched_gasto_id ? `<button class="btn btn-ghost" onclick="pgUnlink('${pgEsc(t.id)}')">Desvincular</button>` : canLink && options ? `<select id="pg-link-${pgEsc(t.id)}"><option value="">Vincular a fixo...</option>${options}</select><button class="btn btn-ghost" onclick="pgLink('${pgEsc(t.id)}')">Vincular</button>` : '';
+    const remove=d.items.find(i=>i.id===t.item_id)?.source==='manual' ? `<button class="btn btn-ghost" onclick="pgDeleteManualEntry('${pgEsc(t.id)}')">Remover</button>` : '';
     const categorySelect=`<select onchange="pgSetCategory('${pgEsc(t.id)}',this.value)"><option value="">Sem categoria</option>${d.categories.map(c=>`<option value="${pgEsc(c.nome)}" ${t.user_category===c.nome?'selected':''}>${pgEsc(c.label)}</option>`).join('')}</select>`;
     const sign=debit?'-':'+';
-    return `<div class="pg-row"><div class="pg-row-main"><b>${pgEsc(t.description)}</b><small>${pgEsc(t.transaction_date)} · ${pgEsc(t.account_name)} · ${pgEsc(t.recipient_name||t.payment_method||'')} · ${t.status==='POSTED'?'Efetivado':'Pendente'}${t.matched_gasto_id?' · Associado a gasto fixo':''}</small></div><div class="pg-row-side"><strong>${sign}${pgMoney(Math.abs(t.amount))}</strong>${categorySelect}${action}</div></div>`;
+    return `<div class="pg-row"><div class="pg-row-main"><b>${pgEsc(t.description)}</b><small>${pgEsc(t.transaction_date)} · ${pgEsc(t.account_name)} · ${pgEsc(t.recipient_name||t.payment_method||'')} · ${t.status==='POSTED'?'Efetivado':'Pendente'}${t.matched_gasto_id?' · Associado a gasto fixo':''}</small></div><div class="pg-row-side"><strong>${sign}${pgMoney(Math.abs(t.amount))}</strong>${categorySelect}${action}${remove}</div></div>`;
   }).join('') : '<div class="pg-empty">Nenhuma movimentação importada neste mês.</div>';
 }
 
@@ -112,6 +118,25 @@ async function pgImportStatement(){
     await pgLoad();
     pgStatus(`Neon: ${result.imported} movimentações importadas, ${result.duplicates} já existentes no mês ${result.month}.`);
   }catch(e){pgStatus('Falha ao importar extrato: '+e.message);}
+}
+async function pgAddManualEntry(){
+  const transaction_date=document.getElementById('pg-manual-date').value;
+  const description=document.getElementById('pg-manual-desc').value.trim();
+  const amount=Number(document.getElementById('pg-manual-amount').value);
+  const direction=document.getElementById('pg-manual-direction').value;
+  if(transaction_date.slice(0,7)!==pgMonth()){pgStatus('A data deve estar no mês selecionado.');return;}
+  if(description.length<2||!Number.isFinite(amount)||amount<=0){pgStatus('Informe descrição e valor positivo.');return;}
+  try{
+    await api('POST','/pluggy/manual-entry',{transaction_date,description,amount,direction});
+    document.getElementById('pg-manual-desc').value='';
+    document.getElementById('pg-manual-amount').value='';
+    await pgLoad();pgStatus('Lançamento do Neon registrado.');
+  }catch(e){pgStatus('Falha ao registrar Neon: '+e.message);}
+}
+async function pgDeleteManualEntry(id){
+  if(!window.confirm('Remover este lançamento manual do Neon?'))return;
+  try{await api('DELETE',`/pluggy/manual-entry/${encodeURIComponent(id)}`);await pgLoad();pgStatus('Lançamento manual removido.');}
+  catch(e){pgStatus('Falha ao remover: '+e.message);}
 }
 async function pgSaveRule(){
   const gasto_id=Number(document.getElementById('pg-rule-gasto').value);
