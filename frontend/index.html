@@ -710,17 +710,10 @@ input[type=number]{-moz-appearance:textfield}
       <div class="sobra-banner" id="sobra-banner"></div>
       <div class="table-wrap" id="table-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
     </div>
-    <div class="page" id="tab-lancamentos">
-      <div class="toolbar"><button class="btn btn-orange" onclick="openModalLanc()">⚡ Novo lançamento</button></div>
-      <div class="sobra-banner" id="sobra-banner2"></div>
-      <div class="lanc-wrap" id="lanc-wrap"></div>
-    </div>
+    <div id="lanc-wrap" hidden></div><div id="sobra-banner2" hidden></div>
     <div class="page" id="tab-metas">
       <div class="toolbar"><button class="btn btn-teal" onclick="openModalMeta()">+ Nova meta</button></div>
       <div class="metas-wrap" id="metas-wrap"></div>
-    </div>
-    <div class="page" id="tab-comparativo">
-      <div class="comp-wrap" id="comp-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
     </div>
     <div class="page" id="tab-historico"><div class="hist-wrap" id="hist-wrap"></div></div>
     <div class="page" id="tab-anotacoes">
@@ -741,137 +734,6 @@ input[type=number]{-moz-appearance:textfield}
         </div></div>
       </div>
     </div>
-    <!-- LANÇAMENTOS RÁPIDOS -->
-    <div class="page" id="tab-lrapidos">
-      <div class="lr-wrap">
-        <!-- Filtros -->
-        <div class="lr-filtros">
-          <div class="lr-filtro">
-            <label>Data início</label>
-            <input type="date" id="lr-f-inicio">
-          </div>
-          <div class="lr-filtro">
-            <label>Data fim</label>
-            <input type="date" id="lr-f-fim">
-          </div>
-          <div class="lr-filtro">
-            <label>Gasto fixo</label>
-            <select id="lr-f-gasto">
-              <option value="">Todos</option>
-            </select>
-          </div>
-          <div class="lr-filtro">
-            <label>Tipo</label>
-            <select id="lr-f-tipo">
-              <option value="">Todos</option>
-              <option value="sub">Subtrações (−)</option>
-              <option value="add">Adições (+)</option>
-              <option value="avulso">Avulsos</option>
-            </select>
-          </div>
-          <div class="lr-filtro">
-            <label>Categoria</label>
-            <select id="lr-f-cat">
-              <option value="">Todas</option>
-            </select>
-          </div>
-          <div class="lr-filtro">
-            <label>Anexos</label>
-            <select id="lr-f-anexo">
-              <option value="">Todos</option>
-              <option value="sim">Com anexo</option>
-              <option value="nao">Sem anexo</option>
-            </select>
-          </div>
-          <div class="lr-filtro-actions">
-            <button class="btn btn-primary" onclick="aplicarFiltrosLR()">Filtrar</button>
-            <button class="btn btn-ghost" onclick="limparFiltrosLR()">Limpar</button>
-          </div>
-        </div>
-        <div class="lr-count" id="lr-count"></div>
-        <div class="lr-cards" id="lr-cards"><div class="lr-empty">Carregando...</div></div>
-      </div>
-    </div>
-
-    <!-- SORTEIO DE TIMES -->
-    <div class="page" id="tab-sorteio">
-      <div class="sortear-wrap">
-
-        <!-- Stats rápidas -->
-        <div class="sort-stats" id="sort-stats"></div>
-
-        <!-- Lista de jogadores -->
-        <div class="sort-section">
-          <h4>⚽ Jogadores cadastrados</h4>
-          <div id="jogadores-lista"></div>
-          <div class="add-jogador-row">
-            <input id="novo-jogador-input" placeholder="Nome do jogador..." maxlength="30"
-              onkeydown="if(event.key==='Enter')addJogador()">
-            <button class="btn btn-primary" onclick="addJogador()">+ Adicionar</button>
-          </div>
-        </div>
-
-        <!-- Configuração do sorteio -->
-        <div class="sort-section">
-          <h4>⚙️ Configuração</h4>
-          <div class="sort-config">
-            <div class="sort-config-item">
-              <label>Número de times</label>
-              <select id="sort-num-times" onchange="atualizarConfigSorteio()">
-                <option value="2">2 times</option>
-                <option value="3">3 times</option>
-                <option value="4">4 times</option>
-              </select>
-            </div>
-            <div class="sort-config-item">
-              <label>Jogadores por time</label>
-              <select id="sort-por-time">
-                <option value="auto">Automático</option>
-                <option value="3">3 por time</option>
-                <option value="4">4 por time</option>
-                <option value="5">5 por time</option>
-                <option value="6">6 por time</option>
-                <option value="7">7 por time</option>
-                <option value="8">8 por time</option>
-                <option value="9">9 por time</option>
-                <option value="10">10 por time</option>
-                <option value="11">11 por time</option>
-              </select>
-            </div>
-          </div>
-          <div id="sort-preview-config" style="font-size:12px;color:var(--muted);margin-bottom:.5rem"></div>
-          <button class="btn-sortear" id="btn-sortear" onclick="sortearTimes()">🎲 Sortear times!</button>
-        </div>
-
-        <!-- Separações (quem não pode jogar junto) -->
-        <div class="sort-section">
-          <h4>🚫 Não podem jogar juntos</h4>
-          <div id="separacoes-lista"></div>
-          <div style="display:flex;gap:6px;margin-top:.75rem;flex-wrap:wrap">
-            <select id="sep-j1" style="flex:1;min-width:120px;background:var(--input-bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;outline:none">
-              <option value="">Jogador 1</option>
-            </select>
-            <select id="sep-j2" style="flex:1;min-width:120px;background:var(--input-bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;outline:none">
-              <option value="">Jogador 2</option>
-            </select>
-            <button class="btn btn-danger" style="padding:7px 12px" onclick="addSeparacao()">+ Separar</button>
-          </div>
-        </div>
-
-        <!-- Resultado do sorteio -->
-        <div class="sort-section" id="sort-resultado" style="display:none">
-          <h4>🏆 Resultado</h4>
-          <div class="times-resultado" id="times-resultado"></div>
-          <div id="reservas-resultado"></div>
-          <div style="display:flex;gap:8px;margin-top:1rem">
-            <button class="btn btn-ghost" style="flex:1" onclick="sortearTimes()">🔀 Sortear novamente</button>
-            <button class="btn btn-ghost" style="flex:1" onclick="copiarTimes()">📋 Copiar</button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
     <div class="page" id="tab-bancos">
       <div class="pg-wrap">
         <div class="pg-head">
