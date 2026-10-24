@@ -129,13 +129,20 @@ systemctl restart financeiro financeiro-pluggy-worker
 if [ -n "$DOMAIN" ]; then
   SERVER_NAME="$DOMAIN"
   LISTEN=80
+  TAILSCALE_LISTEN=""
 else
   SERVER_NAME="_"
   LISTEN=127.0.0.1:8081
+  TAILSCALE_LISTEN=""
+  TAILSCALE_IP="$(tailscale ip -4 2>/dev/null | head -n 1 || true)"
+  if [[ "$TAILSCALE_IP" =~ ^100\.([0-9]{1,3}\.){2}[0-9]{1,3}$ ]]; then
+    TAILSCALE_LISTEN="    listen $TAILSCALE_IP:8081;"
+  fi
 fi
 cat > /etc/nginx/sites-available/financeiro <<EOF
 server {
     listen $LISTEN;
+$TAILSCALE_LISTEN
     server_name $SERVER_NAME;
     root $APP_DIR/frontend;
     index index.html;
@@ -173,7 +180,10 @@ fi
 if [ -n "$DOMAIN" ]; then
   echo "Aplicação: https://$DOMAIN"
 else
-  echo "Teste por túnel SSH: ssh -L 8081:127.0.0.1:8081 USUARIO@IP_DA_VM"
+  if [ -n "$TAILSCALE_LISTEN" ]; then
+    echo "Aplicação pela Tailscale: http://$TAILSCALE_IP:8081/"
+  fi
+  echo "Alternativa por túnel SSH: ssh -L 8081:127.0.0.1:8081 USUARIO@IP_DA_VM"
   echo "Depois abra http://127.0.0.1:8081 no seu navegador."
   echo "Configure um domínio e HTTPS antes de conectar contas reais ou ativar webhooks."
 fi

@@ -41,7 +41,7 @@ cd ~/financeiro
 sudo bash instalar_vm.sh
 ```
 
-O instalador usa `/opt/financeiro`, banco MariaDB `financeiro`, serviços `financeiro` e `financeiro-pluggy-worker`, e porta interna 8001. Ele não altera `/opt/financas`, o banco `financas` ou o serviço antigo. Sem domínio, o Nginx escuta **apenas em `127.0.0.1:8081`** para testes. Acesse com túnel SSH:
+O instalador usa `/opt/financeiro`, banco MariaDB `financeiro`, serviços `financeiro` e `financeiro-pluggy-worker`, e porta interna 8001. Ele não altera `/opt/financas`, o banco `financas` ou o serviço antigo. Sem domínio, o Nginx escuta em `127.0.0.1:8081` e, se a Tailscale estiver instalada na VM, também no IP da Tailscale, porta 8081. Em dispositivos conectados à mesma rede Tailscale, acesse `http://IP_TAILSCALE_DA_VM:8081/`. Como alternativa, use um túnel SSH:
 
 ```bash
 ssh -L 8081:127.0.0.1:8081 USUARIO@IP_DA_VM
