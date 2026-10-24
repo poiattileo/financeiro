@@ -1,0 +1,17 @@
+{
+  "name": "Planejamento Financeiro",
+  "short_name": "Finanças",
+  "description": "Planejamento financeiro pessoal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#0f1117",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%2322c55e'/><polyline points='160,60 100,120 70,90 32,128' stroke='%23000' stroke-width='18' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
