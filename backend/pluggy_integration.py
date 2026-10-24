@@ -242,6 +242,9 @@ def create_router(get_db, verify_token):
     def dashboard(month: str, user=Depends(verify_token)):
         if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
             raise HTTPException(400, "Mês inválido")
+        year, month_number = map(int, month.split("-"))
+        month_start = date(year, month_number, 1)
+        next_month_start = date(year + (month_number == 12), month_number % 12 + 1, 1)
         db = get_db(); cur = db.cursor(dictionary=True)
         try:
             cur.execute("SELECT * FROM pluggy_items WHERE user_id=%s ORDER BY created_at DESC", (user["id"],))
@@ -252,8 +255,9 @@ def create_router(get_db, verify_token):
                 m.gasto_id AS matched_gasto_id, m.source AS match_source
                 FROM pluggy_transactions t JOIN pluggy_accounts a ON a.id=t.account_id
                 LEFT JOIN pluggy_matches m ON m.transaction_id=t.id
-                WHERE t.user_id=%s AND DATE_FORMAT(t.transaction_date,'%%Y-%%m')=%s
-                ORDER BY t.transaction_date DESC, t.id DESC LIMIT 1000""", (user["id"], month))
+                WHERE t.user_id=%s AND t.transaction_date >= %s AND t.transaction_date < %s
+                ORDER BY t.transaction_date DESC, t.id DESC LIMIT 1000""",
+                (user["id"], month_start, next_month_start))
             transactions = cur.fetchall()
             cur.execute("""SELECT r.*, g.nome AS gasto_nome FROM pluggy_rules r
                 JOIN gastos g ON g.id=r.gasto_id WHERE r.user_id=%s ORDER BY g.nome""", (user["id"],))
