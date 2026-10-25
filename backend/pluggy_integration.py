@@ -363,6 +363,25 @@ def create_router(get_db, verify_token):
         finally:
             cur.close(); db.close()
 
+    @router.get("/bills/history")
+    def bill_history(user=Depends(verify_token)):
+        db = get_db(); cur = db.cursor(dictionary=True)
+        try:
+            cur.execute("""SELECT b.due_date,b.total_amount,b.paid_amount,
+                b.account_id,COALESCE(NULLIF(i.display_name,''),i.connector_name) AS bank
+                FROM pluggy_card_bills b JOIN pluggy_items i ON i.id=b.item_id
+                WHERE b.user_id=%s AND i.user_id=%s
+                ORDER BY b.due_date DESC,b.id DESC LIMIT 240""",
+                (user["id"], user["id"]))
+            bills = cur.fetchall()
+            for bill in bills:
+                bill["due_date"] = bill["due_date"].isoformat()
+                bill["total_amount"] = float(bill["total_amount"])
+                bill["paid_amount"] = float(bill["paid_amount"])
+            return bills
+        finally:
+            cur.close(); db.close()
+
     @router.post("/manual-import")
     async def manual_import(month: str = Form(...), file: UploadFile = File(...),
                             user=Depends(verify_token)):

@@ -115,6 +115,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 
 /* TABELA */
 .table-wrap{flex:1;overflow:auto}
+.bill-history{flex:0 0 auto;max-height:225px;overflow:auto;border-top:1px solid var(--border);background:var(--surface);padding:10px 14px}
+.bill-history h3{font-size:13px;margin:0 0 3px;color:var(--text)}
+.bill-history p{font-size:11px;color:var(--muted);margin:0 0 8px}
+.bill-history table{border-collapse:collapse;width:100%;min-width:max-content;font-size:11px}
+.bill-history th,.bill-history td{padding:5px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+.bill-history th:first-child,.bill-history td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
+.bill-history th{color:var(--muted);font-weight:600}
 table.planilha{border-collapse:collapse;min-width:max-content}
 table.planilha th,table.planilha td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap}
 table.planilha thead th{background:var(--surface);position:sticky;top:0;z-index:5;font-size:11px;font-weight:500;color:var(--muted);padding:6px 10px;text-align:center}
@@ -709,6 +716,7 @@ input[type=number]{-moz-appearance:textfield}
       </div>
       <div class="sobra-banner" id="sobra-banner"></div>
       <div class="table-wrap" id="table-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
+      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>Valores por mês de vencimento. Faturas futuras aparecem quando o banco as disponibilizar à Pluggy.</p><div id="bill-history-content">Carregando faturas...</div></div>
     </div>
     <div id="lanc-wrap" hidden></div><div id="sobra-banner2" hidden></div>
     <div class="page" id="tab-metas">
@@ -1851,6 +1859,7 @@ function goTab(id){
   if(id==='lrapidos'){carregarTodosLancamentos().then(()=>renderAbaLR());}
   if(id==='bancos')pgLoad();
   if(id==='dashboard')dashLoad();
+  if(id==='gastos')loadBillHistory();
 }
 function atualizarBadge(){const q=Math.max(0,idxTrabalho()),btn=document.getElementById('bn-historico');const old=btn?.querySelector('.bn-badge');if(old)old.remove();if(q>0){const b=document.createElement('span');b.className='bn-badge';b.textContent=q;btn?.appendChild(b);}}
 
@@ -2518,10 +2527,41 @@ async function delCategoria(id,nome){if(!confirm(`Remover categoria "${nome}"?`)
 
 // ── RENDERS ──
 let valTimers={};
+async function loadBillHistory(){
+  const target=document.getElementById('bill-history-content');
+  if(!target)return;
+  try{
+    const bills=await api('GET','/pluggy/bills/history');
+    const banks=[...new Set(bills.map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    if(!banks.length){target.textContent='Ainda não há faturas importadas da Pluggy.';return;}
+    const months=[...new Set(bills.map(b=>b.due_date.slice(0,7)))];
+    const current=idxParaStr(idxHoje()),next=idxParaStr(idxHoje()+1);
+    if(current)months.push(current);
+    if(next)months.push(next);
+    const ordered=[...new Set(months)].sort((a,b)=>b.localeCompare(a));
+    const byMonthBank=new Map();
+    bills.forEach(b=>{
+      const key=b.due_date.slice(0,7)+'|'+b.bank;
+      byMonthBank.set(key,(byMonthBank.get(key)||0)+Number(b.total_amount||0));
+    });
+    const header=banks.map(bank=>`<th>${esc(bank)}</th>`).join('');
+    const rows=ordered.map(month=>{
+      let total=0,hasBill=false;
+      const cells=banks.map(bank=>{
+        const value=byMonthBank.get(month+'|'+bank);
+        if(value===undefined)return '<td style="color:var(--hint)">—</td>';
+        hasBill=true;total+=value;
+        return `<td>${fmt(value)}</td>`;
+      }).join('');
+      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasBill?fmt(total):'Aguardando fatura'}</td></tr>`;
+    }).join('');
+    target.innerHTML=`<table><thead><tr><th>Mês</th>${header}<th>Total</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }catch(e){target.textContent='Não foi possível carregar as faturas: '+e.message;}
+}
 function renderTabela(){
   const wrap=document.getElementById('table-wrap');atualizarBadge();
   if(!gastos.length&&!parcelas.length){wrap.innerHTML='<div style="padding:2rem;text-align:center;color:var(--hint);font-size:13px">Nenhum gasto cadastrado.</div>';return;}
-  const ini=Math.max(0,idxTrabalho()),n=MESES-ini,it=idxTrabalho();
+  const ini=Math.max(0,idxHoje()),n=MESES-ini,it=idxTrabalho();
   if(n<=0){wrap.innerHTML='<div style="padding:2rem;text-align:center;color:var(--hint)">Todos os meses estão no Histórico.</div>';return;}
   let th='';for(let i=ini;i<MESES;i++)th+=`<th class="mes-head${i===it?' mes-hoje':''}">${mesLabel(i)}${i===it?' ●':''}</th>`;
   let rg='';
@@ -2559,7 +2599,7 @@ function getLancsMes(idx){
   });
 }
 function renderTotais(){
-  const sal=cfg.salario||0,parc=calcParcelasIdx(),lancIdx=calcLancIdxTudo(),ini=Math.max(0,idxTrabalho());
+  const sal=cfg.salario||0,parc=calcParcelasIdx(),lancIdx=calcLancIdxTudo(),ini=Math.max(0,idxHoje());
   for(let i=ini;i<MESES;i++){
     const f=round2(gastos.reduce((s,g)=>s+(g.valores[i]||0),0)),pm=round2(parc[i]||0),lm=round2(lancIdx[i]||0),tot=round2(f+pm),sob=round2(sal+tot);
     const t=document.getElementById('tot-'+i),s=document.getElementById('sob-'+i),l=document.getElementById('lanc-'+i);
