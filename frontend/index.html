@@ -2540,7 +2540,11 @@ async function loadBillHistory(){
     const current=idxParaStr(idxHoje()),next=idxParaStr(idxHoje()+1);
     if(current)months.push(current);
     if(next)months.push(next);
-    const ordered=[...new Set(months)].sort((a,b)=>b.localeCompare(a));
+    const ordered=[...new Set(months)].sort((a,b)=>{
+      const aFuture=a>current,bFuture=b>current;
+      if(aFuture!==bFuture)return aFuture?-1:1;
+      return aFuture?a.localeCompare(b):b.localeCompare(a);
+    });
     const byMonthBank=new Map();
     bills.forEach(b=>{
       const key=b.due_date.slice(0,7)+'|'+b.bank;
