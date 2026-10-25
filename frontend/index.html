@@ -717,7 +717,7 @@ input[type=number]{-moz-appearance:textfield}
       </div>
       <div class="sobra-banner" id="sobra-banner"></div>
       <div class="table-wrap" id="table-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
-      <div class="bill-history" id="bill-history"><h3>Faturas e compras pendentes</h3><p>Em amarelo: somente compras pendentes recebidas pela Pluggy; esse valor não é a fatura aberta. Informe o valor real na planilha até o banco publicar a fatura oficial.</p><div id="bill-history-content">Carregando dados...</div></div>
+      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>Faturas abertas ainda não são informadas pelo banco à Pluggy. Informe o valor real na planilha; as compras pendentes ficam disponíveis separadamente abaixo.</p><div id="bill-history-content">Carregando dados...</div></div>
     </div>
     <div id="lanc-wrap" hidden></div><div id="sobra-banner2" hidden></div>
     <div class="page" id="tab-metas">
@@ -2538,7 +2538,7 @@ async function loadBillHistory(){
     const bills=data.bills||[],previews=data.previews||[];
     const banks=[...new Set([...bills,...previews].map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     if(!banks.length){target.textContent='Ainda não há faturas importadas da Pluggy.';return;}
-    const months=[...new Set([...bills.map(b=>b.due_date.slice(0,7)),...previews.map(p=>p.month)])];
+    const months=[...new Set(bills.map(b=>b.due_date.slice(0,7)))];
     const current=idxParaStr(idxHoje()),next=idxParaStr(idxHoje()+1);
     if(current)months.push(current);
     if(next)months.push(next);
@@ -2552,24 +2552,20 @@ async function loadBillHistory(){
       const key=b.due_date.slice(0,7)+'|'+b.bank;
       byMonthBank.set(key,(byMonthBank.get(key)||0)+Number(b.total_amount||0));
     });
-    const previewByMonthBank=new Map();
-    previews.forEach(p=>{
-      const key=p.month+'|'+p.bank;
-      previewByMonthBank.set(key,(previewByMonthBank.get(key)||0)+Number(p.amount||0));
-    });
     const header=banks.map(bank=>`<th>${esc(bank)}</th>`).join('');
     const rows=ordered.map(month=>{
-      let total=0,hasValue=false,hasPreview=false;
+      let total=0,hasValue=false;
       const cells=banks.map(bank=>{
         const value=byMonthBank.get(month+'|'+bank);
         if(value!==undefined){hasValue=true;total+=value;return `<td>${fmt(value)}</td>`;}
-        const preview=previewByMonthBank.get(month+'|'+bank);
-        if(preview!==undefined){hasValue=true;hasPreview=true;total+=preview;return `<td><span class="bill-preview">Compras ${fmt(preview)}</span></td>`;}
         return '<td style="color:var(--hint)">—</td>';
       }).join('');
-      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasValue?(hasPreview?`<span class="bill-preview">Parcial ${fmt(total)}</span>`:fmt(total)):'Aguardando fatura'}</td></tr>`;
+      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasValue?fmt(total):'Aguardando fatura'}</td></tr>`;
     }).join('');
-    target.innerHTML=`<table><thead><tr><th>Mês</th>${header}<th>Total</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const pendingRows=previews.sort((a,b)=>a.month.localeCompare(b.month)||a.bank.localeCompare(b.bank,'pt-BR'))
+      .map(p=>`<tr><td>${esc(mesRefParaLabel(p.month))}</td><td>${esc(p.bank)}</td><td class="bill-preview">${fmt(p.amount)}</td></tr>`).join('');
+    target.innerHTML=`<table><thead><tr><th>Mês</th>${header}<th>Total</th></tr></thead><tbody>${rows}</tbody></table>`+
+      (pendingRows?`<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--amber);font-size:11px">Ver compras pendentes recebidas pela Pluggy (valores parciais)</summary><table><thead><tr><th>Mês previsto</th><th>Banco</th><th>Compras</th></tr></thead><tbody>${pendingRows}</tbody></table></details>`:'');
   }catch(e){target.textContent='Não foi possível carregar as faturas: '+e.message;}
 }
 function renderTabela(){
