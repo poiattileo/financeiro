@@ -409,16 +409,17 @@ def create_router(get_db, verify_token):
             for bill in bills:
                 month = str(bill["due_date"])[:7]
                 cutoffs[bill["account_id"]] = max(cutoffs.get(bill["account_id"], month), month)
-            cur.execute("""SELECT t.account_id,t.bill_forecast_month,
+            cur.execute("""SELECT t.account_id,bg.gasto_id,t.bill_forecast_month,
                 COALESCE(NULLIF(i.display_name,''),i.connector_name) AS bank,
                 SUM(ABS(t.amount)) AS amount,COUNT(*) AS transactions
                 FROM pluggy_transactions t JOIN pluggy_accounts a ON a.id=t.account_id
                 JOIN pluggy_items i ON i.id=t.item_id
+                LEFT JOIN pluggy_bill_gastos bg ON bg.account_id=t.account_id AND bg.user_id=t.user_id
                 WHERE t.user_id=%s AND a.user_id=%s AND i.user_id=%s
                   AND a.type='CREDIT' AND t.status='PENDING' AND t.direction='DEBIT'
                   AND t.bill_forecast_month IS NOT NULL
                   AND COALESCE(t.operation_type,'')<>'PAGAMENTO_FATURA'
-                GROUP BY t.account_id,t.bill_forecast_month,i.display_name,i.connector_name""",
+                GROUP BY t.account_id,bg.gasto_id,t.bill_forecast_month,i.display_name,i.connector_name""",
                 (user["id"], user["id"], user["id"]))
             now_month = date.today().strftime("%Y-%m")
             last_month = month_from_number(month_number(now_month) + 18)
@@ -430,7 +431,8 @@ def create_router(get_db, verify_token):
                 month = month_from_number(month_number(row["bill_forecast_month"]) + shift)
                 if month < now_month or month <= cutoffs.get(row["account_id"], "") or month > last_month:
                     continue
-                previews.append({"account_id": row["account_id"], "bank": row["bank"],
+                previews.append({"account_id": row["account_id"], "gasto_id": row["gasto_id"],
+                                 "bank": row["bank"],
                                  "month": month, "amount": float(row["amount"]),
                                  "transactions": row["transactions"]})
             for bill in bills:

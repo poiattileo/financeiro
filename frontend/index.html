@@ -147,6 +147,7 @@ input.val{width:90px;background:transparent;border:none;outline:none;color:var(-
 input.val:focus{background:var(--blue-bg);color:var(--blue)}
 input.val.has-val{color:var(--text)}
 input.val.zero{color:var(--hint)}
+input.val.estimated::placeholder{color:var(--amber);opacity:1}
 td.parc-cell{padding:5px 8px;font-family:var(--mono);font-size:12px;text-align:right;color:var(--purple)}
 td.parc-cell.empty{color:var(--hint)}
 tfoot.rodape{position:sticky;bottom:0;z-index:4}
@@ -2527,13 +2528,30 @@ async function salvarCategoria(){
 async function delCategoria(id,nome){if(!confirm(`Remover categoria "${nome}"?`))return;try{await api('DELETE',`/admin/categorias/${id}`);categorias=categorias.filter(c=>c.id!==id);toast('Removido');renderAdmin();popularSelect('g-cat','gasto');popularSelect('p-cat','gasto');popularSelect('ln-cat','lancamento');}catch(e){toast('Erro: '+e.message,false);}}
 
 // ── RENDERS ──
-let valTimers={};
+let valTimers={},billPreviewByGastoMonth=new Map();
+function setBillPreviewPlaceholder(inp){
+  const amount=billPreviewByGastoMonth.get(inp.dataset.id+'|'+idxParaStr(Number(inp.dataset.i)));
+  const estimated=!inp.value&&amount>0;
+  inp.placeholder=estimated?'≈ -'+amount.toFixed(2).replace('.',','):'—';
+  inp.classList.toggle('estimated',estimated);
+  inp.title=estimated?'Prévia Pluggy; digite um valor para substituir manualmente':'Clique para informar o valor';
+}
+function applyBillPreviewPlaceholders(){
+  document.querySelectorAll('#table-wrap input.val').forEach(setBillPreviewPlaceholder);
+}
 async function loadBillHistory(){
   const target=document.getElementById('bill-history-content');
   if(!target)return;
   try{
     const data=await api('GET','/pluggy/bills/history');
     const bills=data.bills||[],previews=data.previews||[];
+    billPreviewByGastoMonth=new Map();
+    previews.forEach(p=>{
+      if(!p.gasto_id)return;
+      const key=p.gasto_id+'|'+p.month;
+      billPreviewByGastoMonth.set(key,(billPreviewByGastoMonth.get(key)||0)+Number(p.amount||0));
+    });
+    applyBillPreviewPlaceholders();
     const banks=[...new Set([...bills,...previews].map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     if(!banks.length){target.textContent='Ainda não há faturas importadas da Pluggy.';return;}
     const months=[...new Set([...bills.map(b=>b.due_date.slice(0,7)),...previews.map(p=>p.month)])];
@@ -2593,10 +2611,11 @@ function renderTabela(){
   sc+=`<td id="sob-${i}">—</td>`;
 }
   wrap.innerHTML=`<table class="planilha"><thead><tr><th>Item</th>${th}</tr>${sp}</thead><tbody>${rg}${rp}</tbody><tfoot class="rodape"><tr class="sobra-row"><td>↑ Sobra</td>${sc}</tr><tr class="lanc-row"><td>⚡ Lançamentos</td>${lc}</tr><tr class="total-row"><td>Total saídas</td>${tc}</tr></tfoot></table>`;
+  applyBillPreviewPlaceholders();
   renderTotais();
   requestAnimationFrame(()=>aplicarCoresSalvas());
 }
-function onValInput(inp){const id=parseInt(inp.dataset.id),i=parseInt(inp.dataset.i),v=parseFloat(inp.value)||0;const g=gastos.find(x=>x.id===id);if(g)g.valores[i]=v;inp.className='val '+(v?'has-val':'zero');renderTotais();renderSobraBanner();renderSobraBanner2();clearTimeout(valTimers[`${id}_${i}`]);valTimers[`${id}_${i}`]=setTimeout(()=>api('PUT',`/gastos/${id}/valor`,{idx:i,valor:v}).catch(()=>toast('Erro ao salvar',false)),600);}
+function onValInput(inp){const id=parseInt(inp.dataset.id),i=parseInt(inp.dataset.i),v=parseFloat(inp.value)||0;const g=gastos.find(x=>x.id===id);if(g)g.valores[i]=v;inp.className='val '+(v?'has-val':'zero');setBillPreviewPlaceholder(inp);renderTotais();renderSobraBanner();renderSobraBanner2();clearTimeout(valTimers[`${id}_${i}`]);valTimers[`${id}_${i}`]=setTimeout(()=>api('PUT',`/gastos/${id}/valor`,{idx:i,valor:v}).catch(()=>toast('Erro ao salvar',false)),600);}
 function onHoverLancCell(e, idx){
   const itens=getLancsMes(idx);
   if(!itens.length) return;
