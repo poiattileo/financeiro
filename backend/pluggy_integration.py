@@ -8,6 +8,7 @@ import hmac
 import uuid
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
+from collections import Counter, defaultdict
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -56,6 +57,16 @@ def local_date(value):
         raise ValueError("Transação sem data")
     # Pluggy's `date` is the posted calendar date; preserve it for monthly budgets.
     return date.fromisoformat(value[:10]).isoformat()
+
+
+def month_number(value):
+    year, month = map(int, value[:7].split("-"))
+    return year * 12 + month - 1
+
+
+def month_from_number(value):
+    year, month = divmod(value, 12)
+    return f"{year:04d}-{month + 1:02d}"
 
 
 def expected_amount(cur, user_id, gasto_id, mes_ref):
@@ -207,6 +218,10 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
                      account.get("currencyCode") or "BRL"))
                 for txn in pluggy.list_transactions(account_id):
                     payment = txn.get("paymentData") or {}
+                    card = txn.get("creditCardMetadata") or {}
+                    forecast_month = card.get("billForecastDate")
+                    if not isinstance(forecast_month, str) or not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", forecast_month):
+                        forecast_month = None
                     receiver = payment.get("receiver") or {}
                     payment_method = payment.get("paymentMethod") or txn.get("operationType")
                     recipient_name = receiver.get("name") or pix_recipient(
@@ -221,21 +236,22 @@ def sync_item(get_db, item_id, user_id, *, allow_unlinked=False):
                     cur.execute("""INSERT INTO pluggy_transactions
                         (id,item_id,account_id,user_id,transaction_date,description,amount,
                          direction,status,payment_method,recipient_name,recipient_document,
-                         provider_id,operation_type)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                         provider_id,operation_type,bill_id,bill_forecast_month)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON DUPLICATE KEY UPDATE transaction_date=VALUES(transaction_date),
                         description=VALUES(description),amount=VALUES(amount),
                         direction=VALUES(direction),status=VALUES(status),
                         payment_method=VALUES(payment_method),recipient_name=VALUES(recipient_name),
                         recipient_document=VALUES(recipient_document),provider_id=VALUES(provider_id),
-                        operation_type=VALUES(operation_type)""",
+                        operation_type=VALUES(operation_type),bill_id=VALUES(bill_id),
+                        bill_forecast_month=VALUES(bill_forecast_month)""",
                         (txn["id"], item_id, account_id, user_id, day,
                          (txn.get("description") or "")[:500], txn.get("amount") or 0,
                          txn.get("type") or "", txn.get("status") or "",
                          payment_method,
                          str(recipient_name)[:200] if recipient_name else None,
                          doc, txn.get("providerId"),
-                         txn.get("operationType")))
+                         txn.get("operationType"), card.get("billId"), forecast_month))
                     if txn.get("status") != "POSTED":
                         cur.execute("DELETE FROM pluggy_matches WHERE transaction_id=%s AND user_id=%s",
                                     (txn["id"], user_id))
@@ -374,11 +390,54 @@ def create_router(get_db, verify_token):
                 ORDER BY b.due_date DESC,b.id DESC LIMIT 240""",
                 (user["id"], user["id"]))
             bills = cur.fetchall()
+            cur.execute("""SELECT t.account_id,t.bill_forecast_month,b.due_date
+                FROM pluggy_transactions t JOIN pluggy_card_bills b
+                  ON b.id=t.bill_id AND b.account_id=t.account_id AND b.user_id=t.user_id
+                WHERE t.user_id=%s AND t.bill_forecast_month IS NOT NULL""",
+                (user["id"],))
+            shifts = defaultdict(Counter)
+            for row in cur.fetchall():
+                shift = month_number(str(row["due_date"])) - month_number(row["bill_forecast_month"])
+                if -2 <= shift <= 2:
+                    shifts[row["account_id"]][shift] += 1
+            reliable_shifts = {}
+            for account_id, counts in shifts.items():
+                shift, matches = counts.most_common(1)[0]
+                if matches >= 5 and matches / sum(counts.values()) >= 0.7:
+                    reliable_shifts[account_id] = shift
+            cutoffs = {}
+            for bill in bills:
+                month = str(bill["due_date"])[:7]
+                cutoffs[bill["account_id"]] = max(cutoffs.get(bill["account_id"], month), month)
+            cur.execute("""SELECT t.account_id,t.bill_forecast_month,
+                COALESCE(NULLIF(i.display_name,''),i.connector_name) AS bank,
+                SUM(ABS(t.amount)) AS amount,COUNT(*) AS transactions
+                FROM pluggy_transactions t JOIN pluggy_accounts a ON a.id=t.account_id
+                JOIN pluggy_items i ON i.id=t.item_id
+                WHERE t.user_id=%s AND a.user_id=%s AND i.user_id=%s
+                  AND a.type='CREDIT' AND t.status='PENDING' AND t.direction='DEBIT'
+                  AND t.bill_forecast_month IS NOT NULL
+                  AND COALESCE(t.operation_type,'')<>'PAGAMENTO_FATURA'
+                GROUP BY t.account_id,t.bill_forecast_month,i.display_name,i.connector_name""",
+                (user["id"], user["id"], user["id"]))
+            now_month = date.today().strftime("%Y-%m")
+            last_month = month_from_number(month_number(now_month) + 18)
+            previews = []
+            for row in cur.fetchall():
+                shift = reliable_shifts.get(row["account_id"])
+                if shift is None:
+                    continue
+                month = month_from_number(month_number(row["bill_forecast_month"]) + shift)
+                if month < now_month or month <= cutoffs.get(row["account_id"], "") or month > last_month:
+                    continue
+                previews.append({"account_id": row["account_id"], "bank": row["bank"],
+                                 "month": month, "amount": float(row["amount"]),
+                                 "transactions": row["transactions"]})
             for bill in bills:
                 bill["due_date"] = bill["due_date"].isoformat()
                 bill["total_amount"] = float(bill["total_amount"])
                 bill["paid_amount"] = float(bill["paid_amount"])
-            return bills
+            return {"bills": bills, "previews": previews}
         finally:
             cur.close(); db.close()
 

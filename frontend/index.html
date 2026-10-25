@@ -122,6 +122,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .bill-history th,.bill-history td{padding:5px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
 .bill-history th:first-child,.bill-history td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
 .bill-history th{color:var(--muted);font-weight:600}
+.bill-preview{color:var(--amber);font-weight:600}
 table.planilha{border-collapse:collapse;min-width:max-content}
 table.planilha th,table.planilha td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap}
 table.planilha thead th{background:var(--surface);position:sticky;top:0;z-index:5;font-size:11px;font-weight:500;color:var(--muted);padding:6px 10px;text-align:center}
@@ -716,7 +717,7 @@ input[type=number]{-moz-appearance:textfield}
       </div>
       <div class="sobra-banner" id="sobra-banner"></div>
       <div class="table-wrap" id="table-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
-      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>Valores por mês de vencimento. Faturas futuras aparecem quando o banco as disponibilizar à Pluggy.</p><div id="bill-history-content">Carregando faturas...</div></div>
+      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>≈ Prévia: soma das compras pendentes conhecidas pela Pluggy. Pode mudar e não inclui compras que o banco ainda não enviou. Sem ≈: fatura oficial.</p><div id="bill-history-content">Carregando faturas...</div></div>
     </div>
     <div id="lanc-wrap" hidden></div><div id="sobra-banner2" hidden></div>
     <div class="page" id="tab-metas">
@@ -2531,10 +2532,11 @@ async function loadBillHistory(){
   const target=document.getElementById('bill-history-content');
   if(!target)return;
   try{
-    const bills=await api('GET','/pluggy/bills/history');
-    const banks=[...new Set(bills.map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const data=await api('GET','/pluggy/bills/history');
+    const bills=data.bills||[],previews=data.previews||[];
+    const banks=[...new Set([...bills,...previews].map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     if(!banks.length){target.textContent='Ainda não há faturas importadas da Pluggy.';return;}
-    const months=[...new Set(bills.map(b=>b.due_date.slice(0,7)))];
+    const months=[...new Set([...bills.map(b=>b.due_date.slice(0,7)),...previews.map(p=>p.month)])];
     const current=idxParaStr(idxHoje()),next=idxParaStr(idxHoje()+1);
     if(current)months.push(current);
     if(next)months.push(next);
@@ -2544,16 +2546,22 @@ async function loadBillHistory(){
       const key=b.due_date.slice(0,7)+'|'+b.bank;
       byMonthBank.set(key,(byMonthBank.get(key)||0)+Number(b.total_amount||0));
     });
+    const previewByMonthBank=new Map();
+    previews.forEach(p=>{
+      const key=p.month+'|'+p.bank;
+      previewByMonthBank.set(key,(previewByMonthBank.get(key)||0)+Number(p.amount||0));
+    });
     const header=banks.map(bank=>`<th>${esc(bank)}</th>`).join('');
     const rows=ordered.map(month=>{
-      let total=0,hasBill=false;
+      let total=0,hasValue=false,hasPreview=false;
       const cells=banks.map(bank=>{
         const value=byMonthBank.get(month+'|'+bank);
-        if(value===undefined)return '<td style="color:var(--hint)">—</td>';
-        hasBill=true;total+=value;
-        return `<td>${fmt(value)}</td>`;
+        if(value!==undefined){hasValue=true;total+=value;return `<td>${fmt(value)}</td>`;}
+        const preview=previewByMonthBank.get(month+'|'+bank);
+        if(preview!==undefined){hasValue=true;hasPreview=true;total+=preview;return `<td><span class="bill-preview">≈ ${fmt(preview)}</span></td>`;}
+        return '<td style="color:var(--hint)">—</td>';
       }).join('');
-      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasBill?fmt(total):'Aguardando fatura'}</td></tr>`;
+      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasValue?(hasPreview?`<span class="bill-preview">≈ ${fmt(total)}</span>`:fmt(total)):'Aguardando dados'}</td></tr>`;
     }).join('');
     target.innerHTML=`<table><thead><tr><th>Mês</th>${header}<th>Total</th></tr></thead><tbody>${rows}</tbody></table>`;
   }catch(e){target.textContent='Não foi possível carregar as faturas: '+e.message;}

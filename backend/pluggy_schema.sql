@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS pluggy_transactions (
   recipient_document VARCHAR(40) NULL,
   provider_id VARCHAR(160) NULL,
   operation_type VARCHAR(80) NULL,
+  bill_id VARCHAR(64) NULL,
+  bill_forecast_month CHAR(7) NULL,
   user_category VARCHAR(50) NULL,
   auto_ignored TINYINT(1) NOT NULL DEFAULT 0,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
