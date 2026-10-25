@@ -147,7 +147,6 @@ input.val{width:90px;background:transparent;border:none;outline:none;color:var(-
 input.val:focus{background:var(--blue-bg);color:var(--blue)}
 input.val.has-val{color:var(--text)}
 input.val.zero{color:var(--hint)}
-input.val.estimated::placeholder{color:var(--amber);opacity:1}
 td.parc-cell{padding:5px 8px;font-family:var(--mono);font-size:12px;text-align:right;color:var(--purple)}
 td.parc-cell.empty{color:var(--hint)}
 tfoot.rodape{position:sticky;bottom:0;z-index:4}
@@ -718,7 +717,7 @@ input[type=number]{-moz-appearance:textfield}
       </div>
       <div class="sobra-banner" id="sobra-banner"></div>
       <div class="table-wrap" id="table-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
-      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>≈ Prévia: soma das compras pendentes conhecidas pela Pluggy. Pode mudar e não inclui compras que o banco ainda não enviou. Sem ≈: fatura oficial. A prévia não entra no total da planilha.</p><div id="bill-history-content">Carregando faturas...</div></div>
+      <div class="bill-history" id="bill-history"><h3>Faturas e compras pendentes</h3><p>Em amarelo: somente compras pendentes recebidas pela Pluggy; esse valor não é a fatura aberta. Informe o valor real na planilha até o banco publicar a fatura oficial.</p><div id="bill-history-content">Carregando dados...</div></div>
     </div>
     <div id="lanc-wrap" hidden></div><div id="sobra-banner2" hidden></div>
     <div class="page" id="tab-metas">
@@ -1689,8 +1688,8 @@ function atualizarBtnTema(){
 function strParaIdx(s){if(!cfg.mes_inicio||!s)return 0;const[y0,m0]=cfg.mes_inicio.split('-').map(Number),[y1,m1]=s.split('-').map(Number);return(y1-y0)*12+(m1-m0);}
 function idxParaStr(idx){if(!cfg.mes_inicio)return'';const[y,m]=cfg.mes_inicio.split('-').map(Number),d=new Date(y,m-1+idx,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
 function idxHoje(){const n=new Date();return strParaIdx(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`);}
-// Mês de trabalho = calendário +1: em setembro já se planeja outubro.
-// A tabela principal começa no mês de trabalho; tudo antes vai pro Histórico.
+// O planejamento do mês atual começa pela fatura do mês seguinte:
+// em outubro, a primeira coluna é out/nov.
 const OFFSET_MES_TRABALHO=1;
 function idxTrabalho(){return idxHoje()+OFFSET_MES_TRABALHO;}
 function mesRefParaLabel(ref){if(!ref||ref.length<7)return ref||'';const[y,m]=ref.split('-').map(Number);if(!y||!m)return ref;return new Date(y,m-1,1).toLocaleString('pt-BR',{month:'long',year:'numeric'});}
@@ -1904,7 +1903,7 @@ function animarNumero(el, valorFinal, prefixo='R$ '){
 function renderSobraBanner(){
   const{sal,fixos,pm,lm,tot,sobra}=calcSobraHoje();
   const banner=document.getElementById('sobra-banner');
-  const it=idxTrabalho(),mesTrab=it>=0&&it<MESES?mesLabel(it,false):'';
+  const it=idxHoje(),mesTrab=it>=0&&it<MESES?mesLabel(it,false):'';
   // verifica se já existe (para animar) ou cria do zero
   if(!banner.querySelector('.sb-val')){
     banner.innerHTML=`
@@ -1924,6 +1923,9 @@ function renderSobraBanner(){
       animarNumero(document.getElementById('sb-sobra'), sobra);
     }, 100);
   } else {
+    const labels=banner.querySelectorAll('.sb-label');
+    if(labels[0])labels[0].textContent=`Salário · ${mesTrab}`;
+    if(labels[4])labels[4].textContent=`Sobra · ${mesTrab}`;
     // só atualiza animando
     animarNumero(document.getElementById('sb-sal'), sal);
     animarNumero(document.getElementById('sb-fixos'), fixos);
@@ -1946,8 +1948,7 @@ function renderSobraBanner2(){
 function atualizarMesTrabLabel(){
   const el=document.getElementById('mes-trab-label');
   if(!el)return;
-  // espelha a 1ª coluna visível da planilha (nunca fica vazio)
-  const ini=Math.min(Math.max(0,idxTrabalho()),MESES-1);
+  const ini=Math.min(Math.max(0,idxHoje()),MESES-1);
   el.textContent=mesLabel(ini,false);
 }
 async function fecharMesSilencioso(idx,mesRef){
@@ -2528,30 +2529,13 @@ async function salvarCategoria(){
 async function delCategoria(id,nome){if(!confirm(`Remover categoria "${nome}"?`))return;try{await api('DELETE',`/admin/categorias/${id}`);categorias=categorias.filter(c=>c.id!==id);toast('Removido');renderAdmin();popularSelect('g-cat','gasto');popularSelect('p-cat','gasto');popularSelect('ln-cat','lancamento');}catch(e){toast('Erro: '+e.message,false);}}
 
 // ── RENDERS ──
-let valTimers={},billPreviewByGastoMonth=new Map();
-function setBillPreviewPlaceholder(inp){
-  const amount=billPreviewByGastoMonth.get(inp.dataset.id+'|'+idxParaStr(Number(inp.dataset.i)));
-  const estimated=!inp.value&&amount>0;
-  inp.placeholder=estimated?'≈ -'+amount.toFixed(2).replace('.',','):'—';
-  inp.classList.toggle('estimated',estimated);
-  inp.title=estimated?'Prévia Pluggy; digite um valor para substituir manualmente':'Clique para informar o valor';
-}
-function applyBillPreviewPlaceholders(){
-  document.querySelectorAll('#table-wrap input.val').forEach(setBillPreviewPlaceholder);
-}
+let valTimers={};
 async function loadBillHistory(){
   const target=document.getElementById('bill-history-content');
   if(!target)return;
   try{
     const data=await api('GET','/pluggy/bills/history');
     const bills=data.bills||[],previews=data.previews||[];
-    billPreviewByGastoMonth=new Map();
-    previews.forEach(p=>{
-      if(!p.gasto_id)return;
-      const key=p.gasto_id+'|'+p.month;
-      billPreviewByGastoMonth.set(key,(billPreviewByGastoMonth.get(key)||0)+Number(p.amount||0));
-    });
-    applyBillPreviewPlaceholders();
     const banks=[...new Set([...bills,...previews].map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     if(!banks.length){target.textContent='Ainda não há faturas importadas da Pluggy.';return;}
     const months=[...new Set([...bills.map(b=>b.due_date.slice(0,7)),...previews.map(p=>p.month)])];
@@ -2580,10 +2564,10 @@ async function loadBillHistory(){
         const value=byMonthBank.get(month+'|'+bank);
         if(value!==undefined){hasValue=true;total+=value;return `<td>${fmt(value)}</td>`;}
         const preview=previewByMonthBank.get(month+'|'+bank);
-        if(preview!==undefined){hasValue=true;hasPreview=true;total+=preview;return `<td><span class="bill-preview">≈ ${fmt(preview)}</span></td>`;}
+        if(preview!==undefined){hasValue=true;hasPreview=true;total+=preview;return `<td><span class="bill-preview">Compras ${fmt(preview)}</span></td>`;}
         return '<td style="color:var(--hint)">—</td>';
       }).join('');
-      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasValue?(hasPreview?`<span class="bill-preview">≈ ${fmt(total)}</span>`:fmt(total)):'Aguardando dados'}</td></tr>`;
+      return `<tr><td>${esc(mesRefParaLabel(month))}</td>${cells}<td>${hasValue?(hasPreview?`<span class="bill-preview">Parcial ${fmt(total)}</span>`:fmt(total)):'Aguardando fatura'}</td></tr>`;
     }).join('');
     target.innerHTML=`<table><thead><tr><th>Mês</th>${header}<th>Total</th></tr></thead><tbody>${rows}</tbody></table>`;
   }catch(e){target.textContent='Não foi possível carregar as faturas: '+e.message;}
@@ -2591,7 +2575,7 @@ async function loadBillHistory(){
 function renderTabela(){
   const wrap=document.getElementById('table-wrap');atualizarBadge();
   if(!gastos.length&&!parcelas.length){wrap.innerHTML='<div style="padding:2rem;text-align:center;color:var(--hint);font-size:13px">Nenhum gasto cadastrado.</div>';return;}
-  const ini=Math.max(0,idxHoje()),n=MESES-ini,it=idxTrabalho();
+  const ini=Math.max(0,idxTrabalho()),n=MESES-ini,it=idxTrabalho();
   if(n<=0){wrap.innerHTML='<div style="padding:2rem;text-align:center;color:var(--hint)">Todos os meses estão no Histórico.</div>';return;}
   let th='';for(let i=ini;i<MESES;i++)th+=`<th class="mes-head${i===it?' mes-hoje':''}">${mesLabel(i)}${i===it?' ●':''}</th>`;
   let rg='';
@@ -2611,11 +2595,10 @@ function renderTabela(){
   sc+=`<td id="sob-${i}">—</td>`;
 }
   wrap.innerHTML=`<table class="planilha"><thead><tr><th>Item</th>${th}</tr>${sp}</thead><tbody>${rg}${rp}</tbody><tfoot class="rodape"><tr class="sobra-row"><td>↑ Sobra</td>${sc}</tr><tr class="lanc-row"><td>⚡ Lançamentos</td>${lc}</tr><tr class="total-row"><td>Total saídas</td>${tc}</tr></tfoot></table>`;
-  applyBillPreviewPlaceholders();
   renderTotais();
   requestAnimationFrame(()=>aplicarCoresSalvas());
 }
-function onValInput(inp){const id=parseInt(inp.dataset.id),i=parseInt(inp.dataset.i),v=parseFloat(inp.value)||0;const g=gastos.find(x=>x.id===id);if(g)g.valores[i]=v;inp.className='val '+(v?'has-val':'zero');setBillPreviewPlaceholder(inp);renderTotais();renderSobraBanner();renderSobraBanner2();clearTimeout(valTimers[`${id}_${i}`]);valTimers[`${id}_${i}`]=setTimeout(()=>api('PUT',`/gastos/${id}/valor`,{idx:i,valor:v}).catch(()=>toast('Erro ao salvar',false)),600);}
+function onValInput(inp){const id=parseInt(inp.dataset.id),i=parseInt(inp.dataset.i),v=parseFloat(inp.value)||0;const g=gastos.find(x=>x.id===id);if(g)g.valores[i]=v;inp.className='val '+(v?'has-val':'zero');renderTotais();renderSobraBanner();renderSobraBanner2();clearTimeout(valTimers[`${id}_${i}`]);valTimers[`${id}_${i}`]=setTimeout(()=>api('PUT',`/gastos/${id}/valor`,{idx:i,valor:v}).catch(()=>toast('Erro ao salvar',false)),600);}
 function onHoverLancCell(e, idx){
   const itens=getLancsMes(idx);
   if(!itens.length) return;
@@ -2630,7 +2613,7 @@ function getLancsMes(idx){
   });
 }
 function renderTotais(){
-  const sal=cfg.salario||0,parc=calcParcelasIdx(),lancIdx=calcLancIdxTudo(),ini=Math.max(0,idxHoje());
+  const sal=cfg.salario||0,parc=calcParcelasIdx(),lancIdx=calcLancIdxTudo(),ini=Math.max(0,idxTrabalho());
   for(let i=ini;i<MESES;i++){
     const f=round2(gastos.reduce((s,g)=>s+(g.valores[i]||0),0)),pm=round2(parc[i]||0),lm=round2(lancIdx[i]||0),tot=round2(f+pm),sob=round2(sal+tot);
     const t=document.getElementById('tot-'+i),s=document.getElementById('sob-'+i),l=document.getElementById('lanc-'+i);
