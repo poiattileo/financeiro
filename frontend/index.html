@@ -718,7 +718,7 @@ input[type=number]{-moz-appearance:textfield}
       </div>
       <div class="sobra-banner" id="sobra-banner"></div>
       <div class="table-wrap" id="table-wrap"><div class="loading"><div class="spinner"></div>Carregando...</div></div>
-      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>Faturas abertas ainda não são informadas pelo banco à Pluggy. Informe o valor real na planilha; as compras pendentes ficam disponíveis separadamente abaixo.</p><div id="bill-history-content">Carregando dados...</div></div>
+      <div class="bill-history" id="bill-history"><h3>Faturas mês a mês</h3><p>A fatura confirmada de outubro entra na coluna out/nov da planilha. Faturas ainda abertas aparecem quando o banco as enviar à Pluggy; compras pendentes ficam separadas abaixo.</p><div id="bill-history-content">Carregando dados...</div></div>
     </div>
     <div id="lanc-wrap" hidden></div><div id="sobra-banner2" hidden></div>
     <div class="page" id="tab-metas">
@@ -2535,7 +2535,7 @@ function applyLastBillHints(){
   const first=Math.max(0,idxTrabalho());
   document.querySelectorAll(`#table-wrap input.val[data-i="${first}"]`).forEach(inp=>{
     const bill=lastBillByGasto.get(Number(inp.dataset.id));
-    if(!bill)return;
+    if(!bill||inp.value)return;
     const cell=inp.closest('td');
     if(!cell||cell.querySelector('.last-bill-hint'))return;
     const hint=document.createElement('span');

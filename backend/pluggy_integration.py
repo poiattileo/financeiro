@@ -127,7 +127,7 @@ def auto_match(cur, user_id, transaction_id):
 
 
 def sync_card_bills(cur, account, item_id, user_id, item_label):
-    """Keep bill amounts by due month; preserve any value edited by the user."""
+    """Book a confirmed bill in the next planning column; preserve manual edits."""
     account_id = account["id"]
     cur.execute("SELECT gasto_id FROM pluggy_bill_gastos WHERE account_id=%s AND user_id=%s",
                 (account_id, user_id))
@@ -167,7 +167,8 @@ def sync_card_bills(cur, account, item_id, user_id, item_label):
                 (bill["id"], account_id, item_id, user_id, due, amount, paid))
             if amount <= 0 or not re.fullmatch(r"\d{4}-\d{2}", base):
                 continue
-            idx = (int(due[:4]) - int(base[:4])) * 12 + int(due[5:7]) - int(base[5:7])
+            # The planning column out/nov contains the bill current in October.
+            idx = (int(due[:4]) - int(base[:4])) * 12 + int(due[5:7]) - int(base[5:7]) + 1
             if not 0 <= idx < 48:
                 continue
             cur.execute("SELECT valor FROM gasto_valores WHERE gasto_id=%s AND idx=%s",
@@ -578,6 +579,7 @@ def create_router(get_db, verify_token):
         year, month_number = map(int, month.split("-"))
         month_start = date(year, month_number, 1)
         next_month_start = date(year + (month_number == 12), month_number % 12 + 1, 1)
+        previous_month_start = date(year - (month_number == 1), (month_number - 2) % 12 + 1, 1)
         db = get_db(); cur = db.cursor(dictionary=True)
         try:
             cur.execute("SELECT * FROM pluggy_items WHERE user_id=%s ORDER BY created_at DESC", (user["id"],))
@@ -610,7 +612,7 @@ def create_router(get_db, verify_token):
                 COALESCE(SUM(LEAST(b.total_amount,b.paid_amount)),0) AS paid
                 FROM pluggy_card_bills b JOIN pluggy_bill_gastos bg ON bg.account_id=b.account_id
                 WHERE b.user_id=%s AND b.due_date >= %s AND b.due_date < %s
-                GROUP BY bg.gasto_id""", (user["id"], month_start, next_month_start))
+                GROUP BY bg.gasto_id""", (user["id"], previous_month_start, month_start))
             for row in cur.fetchall():
                 paid[row["gasto_id"]] = max(paid.get(row["gasto_id"], Decimal("0")),
                                             Decimal(str(row["paid"])))
