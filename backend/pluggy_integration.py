@@ -384,8 +384,9 @@ def create_router(get_db, verify_token):
         db = get_db(); cur = db.cursor(dictionary=True)
         try:
             cur.execute("""SELECT b.due_date,b.total_amount,b.paid_amount,
-                b.account_id,COALESCE(NULLIF(i.display_name,''),i.connector_name) AS bank
+                b.account_id,bg.gasto_id,COALESCE(NULLIF(i.display_name,''),i.connector_name) AS bank
                 FROM pluggy_card_bills b JOIN pluggy_items i ON i.id=b.item_id
+                LEFT JOIN pluggy_bill_gastos bg ON bg.account_id=b.account_id AND bg.user_id=b.user_id
                 WHERE b.user_id=%s AND i.user_id=%s
                 ORDER BY b.due_date DESC,b.id DESC LIMIT 240""",
                 (user["id"], user["id"]))

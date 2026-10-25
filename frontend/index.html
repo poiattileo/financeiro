@@ -123,6 +123,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .bill-history th:first-child,.bill-history td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
 .bill-history th{color:var(--muted);font-weight:600}
 .bill-preview{color:var(--amber);font-weight:600}
+.last-bill-hint{display:block;padding:0 8px 4px;text-align:right;color:var(--muted);font-size:9px;white-space:nowrap}
 table.planilha{border-collapse:collapse;min-width:max-content}
 table.planilha th,table.planilha td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap}
 table.planilha thead th{background:var(--surface);position:sticky;top:0;z-index:5;font-size:11px;font-weight:500;color:var(--muted);padding:6px 10px;text-align:center}
@@ -2529,13 +2530,35 @@ async function salvarCategoria(){
 async function delCategoria(id,nome){if(!confirm(`Remover categoria "${nome}"?`))return;try{await api('DELETE',`/admin/categorias/${id}`);categorias=categorias.filter(c=>c.id!==id);toast('Removido');renderAdmin();popularSelect('g-cat','gasto');popularSelect('p-cat','gasto');popularSelect('ln-cat','lancamento');}catch(e){toast('Erro: '+e.message,false);}}
 
 // ── RENDERS ──
-let valTimers={};
+let valTimers={},lastBillByGasto=new Map();
+function applyLastBillHints(){
+  const first=Math.max(0,idxTrabalho());
+  document.querySelectorAll(`#table-wrap input.val[data-i="${first}"]`).forEach(inp=>{
+    const bill=lastBillByGasto.get(Number(inp.dataset.id));
+    if(!bill)return;
+    const cell=inp.closest('td');
+    if(!cell||cell.querySelector('.last-bill-hint'))return;
+    const hint=document.createElement('span');
+    hint.className='last-bill-hint';
+    hint.textContent=`Últ. ${bill.month.slice(5)}/${bill.month.slice(2,4)}: ${Number(bill.amount).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    hint.title='Última fatura confirmada pela Pluggy; não é o valor da fatura aberta';
+    cell.appendChild(hint);
+  });
+}
 async function loadBillHistory(){
   const target=document.getElementById('bill-history-content');
   if(!target)return;
   try{
     const data=await api('GET','/pluggy/bills/history');
     const bills=data.bills||[],previews=data.previews||[];
+    lastBillByGasto=new Map();
+    const todayMonth=idxParaStr(idxHoje());
+    bills.forEach(b=>{
+      if(!b.gasto_id||b.due_date.slice(0,7)>todayMonth)return;
+      const month=b.due_date.slice(0,7),old=lastBillByGasto.get(Number(b.gasto_id));
+      if(!old||month>old.month)lastBillByGasto.set(Number(b.gasto_id),{month,amount:Number(b.total_amount)});
+    });
+    applyLastBillHints();
     const banks=[...new Set([...bills,...previews].map(b=>b.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     if(!banks.length){target.textContent='Ainda não há faturas importadas da Pluggy.';return;}
     const months=[...new Set(bills.map(b=>b.due_date.slice(0,7)))];
@@ -2591,6 +2614,7 @@ function renderTabela(){
   sc+=`<td id="sob-${i}">—</td>`;
 }
   wrap.innerHTML=`<table class="planilha"><thead><tr><th>Item</th>${th}</tr>${sp}</thead><tbody>${rg}${rp}</tbody><tfoot class="rodape"><tr class="sobra-row"><td>↑ Sobra</td>${sc}</tr><tr class="lanc-row"><td>⚡ Lançamentos</td>${lc}</tr><tr class="total-row"><td>Total saídas</td>${tc}</tr></tfoot></table>`;
+  applyLastBillHints();
   renderTotais();
   requestAnimationFrame(()=>aplicarCoresSalvas());
 }
